@@ -28,6 +28,9 @@ def train_and_evaluate(opt):
     # Read in dataset using dataloader
 
     # Initialize model (refer to resnet.py for example)
+    
+    # Initialize Trainer for initializing losses, optimizers, loading 
+    weights, etc.
 
     # Train model
     if mode == TRAIN:
