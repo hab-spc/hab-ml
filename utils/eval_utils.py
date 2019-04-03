@@ -1,17 +1,78 @@
-'''
-utils
-
-Created on May 14 2018 23:15 
-#@author: Kevin Le 
-'''
-import matplotlib.pyplot as plt
 import itertools
-import numpy as np
-import pandas as pd
-from collections import OrderedDict
 import os
+import math
 
-from dataset import SPCDataset
+import matplotlib.pyplot as plt
+import numpy as np
+
+class AverageMeter(object):
+    """Computes and stores the average and current value"""
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.data = []
+        self.val = 0.
+        self.avg = 0.
+        self.sum = 0.
+        self.count = 0.
+        self.std = 0.
+
+    def update(self, val, n=1):
+        val = val.astype(float) if isinstance(val, np.ndarray) else float(val)
+        self.data.append(val)
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+        self.std = np.std(self.data)
+
+def get_meter(num_meters=3):
+    return [AverageMeter() for i in range(num_meters)]
+
+
+def vis_training(train_points, val_points, num_epochs=0, loss=True, **kwargs):
+    """ Visualize losses and accuracies w.r.t each epoch
+
+    Args:
+        num_epochs: (int) Number of epochs
+        train_points: (list) Points of the training curve
+        val_points: (list) Points of the validation curve
+        loss: (bool) Flag for loss or accuracy. Defaulted to True for loss
+
+    """
+    # Check if nan values in data points
+    train_points = [i for i in train_points if not math.isnan(i)]
+    val_points = [i for i in val_points if not math.isnan(i)]
+    num_epochs = len(train_points)
+    x = np.arange(0, num_epochs)
+
+    plt.plot(x, train_points, 'b')
+    plt.plot(x, val_points, 'r')
+
+    title = '{} vs Number of Epochs'.format('Loss' if loss else 'Accuracy')
+    if 'EXP' in kwargs:
+        title += ' (EXP: {})'.format(kwargs['EXP'])
+    plt.title(title)
+
+    if loss:
+        plt.ylabel('Cross Entropy Loss')
+    else:
+        plt.ylabel('Accuracy')
+
+    plt.gca().legend(('Train', 'Val'))
+    plt.xlabel('Number of Epochs')
+
+    if not os.path.exists('figs'):
+        os.makedirs('figs')
+
+    save_path = './figs/train_val_{}'.format('loss' if loss else 'accuracy')
+    for k_, v_ in kwargs.items():
+        save_path += '_%s' % v_
+    save_path += '.png'
+
+    plt.savefig(save_path)
+    plt.show()
 
 def plot_confusion_matrix(cm, classes, normalize=False, title='Confusion matrix', cmap=plt.cm.Blues):
     """
@@ -107,49 +168,3 @@ def plot_roc_curve(gtruth, predictions, num_class):
     plt.title ('Receiver Operating Characteristic')
     plt.legend (loc="lower right")
     plt.show ()
-
-def save_predictions(img_paths, gtruth, predictions, probs, label_file, output_fn):
-    # df = pd.DataFrame({
-    #     'image':img_paths,
-    #     'gtruth':gtruth,
-    #     'predictions':predictions,
-    #     'confidence_level': calculate_confidence_lvl(probs)
-    # })
-    data = OrderedDict()
-    data['image'] = img_paths
-    data['gtruth'] = gtruth
-    data['predictions'] = predictions
-    data['confidence_level'] = calculate_confidence_lvl(probs)
-    df = pd.DataFrame(data)
-    df = map_labels(df, label_file, 'predictions')
-    try:
-        df.to_csv(output_fn)
-    except:
-        print('{} does not exist'.format(output_fn))
-
-def calculate_confidence_lvl(probs):
-    side_lobe = np.sort(probs)
-    side_lobe = side_lobe[::-1]
-    confidence_level = [(side_lobe[i,1]-side_lobe[i,0])/side_lobe[i,1] for i in range(len(side_lobe))]
-    return confidence_level
-
-def verify_dates():
-    import glob
-    import os
-
-    data_dict = {}
-    for data in ['good_proro', 'bad_proro']:
-        img = {}
-        images = glob.glob (
-            '/data4/plankton_wi17/plankton/plankton_binary_classifiers/plankton_phytoplankton/images_orig/{}/*'.format(data))
-        img['images'] = sorted([os.path.basename (i).replace ('jpg', 'tif') for i in images])
-        img['times'] = sorted([i.split('-')[1] for i in img['images']])
-        data_dict[data] = img
-    data_dict['bad_proro']['spc2'] = [i.split('-')[1] for i in data_dict['bad_proro']['images'] if 'SPC2' in i]
-    data_dict['bad_proro']['spcp2'] = [i.split ('-')[1] for i in data_dict['bad_proro']['images'] if 'SPCP2' in i]
-
-def main():
-    pass
-
-if __name__ == '__main__':
-    main()
