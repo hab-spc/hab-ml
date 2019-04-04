@@ -47,3 +47,18 @@ def save_predictions(img_paths, gtruth, predictions, probs, label_file, output_f
         df.to_csv(output_fn)
     except:
         print('{} does not exist'.format(output_fn))
+
+def train_val_split(df, label_col='label', partition=0.15, seed=42):
+    from sklearn.model_selection import train_test_split
+    train, val, _, _ = train_test_split(df, df[label_col],
+                                        test_size=partition, random_state=seed)
+    return train, val
+
+def preprocess_dataframe(df, proro=False):
+    if proro:
+        df_ = df.copy()
+
+        df_ = df_[(df_['label'] == 'good_proro') | (df_['label'] ==
+                                                    'bad_proro')]
+        return df_
+
