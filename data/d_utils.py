@@ -54,11 +54,31 @@ def train_val_split(df, label_col='label', partition=0.15, seed=42):
                                         test_size=partition, random_state=seed)
     return train, val
 
-def preprocess_dataframe(df, proro=False):
+def preprocess_dataframe(df, proro=False, enable_uniform=False):
     if proro:
         df_ = df.copy()
 
-        df_ = df_[(df_['label'] == 'good_proro') | (df_['label'] ==
-                                                    'bad_proro')]
+        df_ = df_[(df_['label']=='good_proro') |
+                  (df_['label']=='bad_proro')].reset_index(drop=True)
+
+        if enable_uniform:
+            df_ = sample_uniformly(df_)
+
         return df_
+
+def sample_uniformly(df, label_col='label', sample_avg=False, seed=42):
+    img_counts = df[label_col].value_counts().to_dict()
+
+    if sample_avg:
+        sample_size = int(df[label_col].value_counts().mean())
+    else:
+        sample_size = int(df[label_col].value_counts().min())
+
+    sampled_classes = {k: v for k,v in img_counts.items() if v > sample_size}
+    for cls in sampled_classes:
+        #TODO log sample sizes for each class
+        temp = df[df[label_col] == cls].sample(n=sampled_classes[cls]-sample_size,
+                                               random_state=seed)
+        df = df.drop(temp.index)
+    return df
 

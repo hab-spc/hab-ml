@@ -44,7 +44,8 @@ def create_proro_csv(filter_word='proro', output_dir=DATA_DIR+'/csv/proro'):
                 proro_df = proro_df.append(pd.DataFrame(pd_dict))
 
             proro_df.to_csv(os.path.join(output_dir, 'proro_trainval_raw.csv'))
-            proro_df = preprocess_dataframe(proro_df, proro=True)
+            proro_df = preprocess_dataframe(proro_df, proro=True,
+                                            enable_uniform=True)
 
             # Train val split
             train_df, val_df = train_val_split(proro_df)
