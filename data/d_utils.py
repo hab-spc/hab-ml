@@ -1,6 +1,7 @@
 """ """
 # Standard dist imports
 from collections import OrderedDict
+import logging
 
 # Third party imports
 
@@ -48,37 +49,77 @@ def save_predictions(img_paths, gtruth, predictions, probs, label_file, output_f
     except:
         print('{} does not exist'.format(output_fn))
 
-def train_val_split(df, label_col='label', partition=0.15, seed=42):
+def train_val_split(df, label_col='label', partition=0.15, seed=42,
+                    logger=None):
     from sklearn.model_selection import train_test_split
+
+    logger = logger if logger else logging.getLogger('train-val-split')
+    logger.debug('Training validation split (partition={})'.format(partition))
+
     train, val, _, _ = train_test_split(df, df[label_col],
                                         test_size=partition, random_state=seed)
+    logger.info('Training size: {} | Validation size: {}\n'.format(
+        train.shape[0], val.shape[0]))
+    train = train.reset_index(drop=True)
+    val = val.reset_index(drop=True)
     return train, val
 
-def preprocess_dataframe(df, proro=False, enable_uniform=False):
+def preprocess_dataframe(df, logger=None, proro=False, enable_uniform=False):
+    logger = logger if logger else logging.getLogger('preprocess-df')
+
     if proro:
         df_ = df.copy()
+        logger.debug(df_.head())
+        logger.debug('Size: {}\n'.format(df_.shape))
 
-        df_ = df_[(df_['label']=='good_proro') |
-                  (df_['label']=='bad_proro')].reset_index(drop=True)
+        df_ = filter_classes(df_)
 
         if enable_uniform:
             df_ = sample_uniformly(df_)
 
         return df_
 
-def sample_uniformly(df, label_col='label', sample_avg=False, seed=42):
-    img_counts = df[label_col].value_counts().to_dict()
+def filter_classes(df, logger=None):
+    logger = logger if logger else logging.getLogger('filter-cls')
+    logger.debug('Filtering classes')
 
+    curr_size = df.shape
+    df = df[(df['label'] == 'good_proro') |
+              (df['label'] == 'bad_proro')].reset_index(drop=True)
+    filtered_size = df.shape
+    logger.debug('Filtered for binary prorocentrum classes. {} -> {} ({'
+                 '})\n'.format(curr_size[0], filtered_size[0],
+                             curr_size[0] - filtered_size[0]))
+    return df
+
+
+def sample_uniformly(df, label_col='label', sample_avg=False, seed=42,
+                     logger=None):
+    logger = logger if logger else logging.getLogger('sample-uniformly')
+    logger.debug('Sampling uniformly')
+
+    img_counts = df[label_col].value_counts().to_dict()
+    logger.debug('Img Counts: {}'.format(img_counts))
+
+    sample_size = 0
     if sample_avg:
         sample_size = int(df[label_col].value_counts().mean())
     else:
         sample_size = int(df[label_col].value_counts().min())
+    logger.debug('Sample size (sample_avg={}): {}'.format(sample_avg, sample_size))
 
     sampled_classes = {k: v for k,v in img_counts.items() if v > sample_size}
     for cls in sampled_classes:
-        #TODO log sample sizes for each class
-        temp = df[df[label_col] == cls].sample(n=sampled_classes[cls]-sample_size,
-                                               random_state=seed)
+        n = sampled_classes[cls]-sample_size
+        temp = df[df[label_col] == cls].sample(n=n, random_state=seed)
         df = df.drop(temp.index)
+
+        cls_size = df[df[label_col] == cls].shape[0]
+        logger.debug('Cls {}: removed {} samples | size: {}'.
+                     format(cls, n, cls_size))
+
+    final_img_counts = df[label_col].value_counts().to_dict()
+    logger.debug('Final distribution: {}'.format(final_img_counts))
+    logger.debug('\n')
     return df
 
