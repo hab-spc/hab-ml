@@ -46,6 +46,7 @@ class Logger(object):
         logging.info("="*30 + "   {}   ".format(title) + "="*30)
 
 if __name__ == '__main__':
+    """Example for usage"""
     log_filename = 'data/test.log'
     Logger(log_filename, logging.DEBUG, False)
 
