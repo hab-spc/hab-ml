@@ -26,9 +26,9 @@ class Logger(object):
                                 filename=log_filename,
                                 filemode='w')
 
-            # define a Handler which writes INFO messages or higher to the sys.stderr
+            # define a Handler which writes LVL messages or higher to the sys.stderr
             console = logging.StreamHandler()
-            console.setLevel(logging.INFO)
+            console.setLevel(level)
             # set a format which is simpler for console use
             formatter = logging.Formatter('')
             # tell the handler to use this format
@@ -43,7 +43,7 @@ class Logger(object):
 
     @staticmethod
     def section_break(title):
-        logging.info("="*30 + "   {}   ".format(title) + "="*30)
+        logging.debug("="*30 + "   {}   ".format(title) + "="*30)
 
 if __name__ == '__main__':
     """Example for usage"""

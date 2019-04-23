@@ -60,6 +60,11 @@ def train_val_split(df, label_col='label', partition=0.15, seed=42,
                                         test_size=partition, random_state=seed)
     logger.info('Training size: {} | Validation size: {}\n'.format(
         train.shape[0], val.shape[0]))
+    logger.debug('Training distribution')
+    logger.debug(train[label_col].value_counts())
+    logger.debug('Validation distribution')
+    logger.debug(val[label_col].value_counts())
+
     train = train.reset_index(drop=True)
     val = val.reset_index(drop=True)
     return train, val

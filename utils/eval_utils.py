@@ -4,6 +4,10 @@ import math
 
 import matplotlib.pyplot as plt
 import numpy as np
+import torch.nn as nn
+
+import warnings
+warnings.filterwarnings("ignore")
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -27,9 +31,89 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
         self.std = np.std(self.data)
 
-def get_meter(num_meters=3):
-    return [AverageMeter() for i in range(num_meters)]
+def get_meter(meters=['batch_time', 'loss', 'acc']):
+    return {meter_type: AverageMeter() for meter_type in meters}
 
+def accuracy(predictions, targets, axis=1):
+    batch_size = predictions.size(0)
+    predictions = predictions.max(axis)[1].type_as(targets)
+    hits = predictions.eq(targets)
+    acc = 100. * hits.sum().float() / float(batch_size)
+    return acc
+
+class EvalMetrics(object):
+    def __init__(self, classes, predictions=[], gtruth=[], model_dir=''):
+        self.num_class = len(classes)
+        self.classes = classes
+        self.predictions = predictions
+        self.gtruth = gtruth
+        self.results_dir = os.path.join(model_dir, 'figs')
+        if not os.path.exists(self.results_dir):
+            os.makedirs(self.results_dir)
+        self.probabilities = []
+        self.softmax = nn.Softmax()
+
+    def update(self, predictions, targets, axis=1):
+        # TODO save image id along with predicitons to save back to image files
+        probs = self.softmax(predictions).detach().data.cpu().numpy()
+        self.probabilities.extend(probs)
+
+        predictions = predictions.detach().data.cpu().numpy()
+        predictions = predictions.argmax(axis).astype(int)
+        self.predictions.extend(predictions)
+
+        targets = targets.detach().data.cpu().numpy().astype(int)
+        self.gtruth.extend(targets)
+
+    def compute_cm(self, plot=False):
+        # Create array for confusion matrix with dimensions based on number of classes
+        confusion_matrix_rawcount = np.zeros((self.num_class, self.num_class))
+        class_count = np.zeros(
+            (self.num_class, 1))  # 1st col represents number of images per class
+
+        # Create confusion matrix
+        for t, p in zip(self.gtruth, self.predictions):
+            class_count[t, 0] += 1
+            confusion_matrix_rawcount[t, p] += 1
+        confusion_matrix_rate = np.zeros((self.num_class, self.num_class))
+        for i in range(self.num_class):
+            confusion_matrix_rate[i, :] = (confusion_matrix_rawcount[i, :]) / \
+                                          class_count[i, 0] * 100
+        confusion_matrix_rate = np.around(confusion_matrix_rate, decimals=4)
+        if plot:
+            self._plot_confusion_matrix(confusion_matrix_rate)
+        return confusion_matrix_rate
+
+
+    def _plot_confusion_matrix(self, cm, normalize=False,
+                               title='Confusion matrix',  cmap=plt.cm.Blues):
+        if normalize:
+            cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+            print("Normalized confusion matrix")
+        else:
+            print('Confusion matrix, without normalization')
+
+        print(cm)
+
+        plt.imshow(cm, interpolation='nearest', cmap=cmap)
+        plt.title(title)
+        plt.colorbar()
+        tick_marks = np.arange(len(self.classes))
+        plt.xticks(tick_marks, self.classes, rotation=45)
+        plt.yticks(tick_marks, self.classes)
+
+        fmt = '.2f'
+        thresh = cm.max() / 2.
+        for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+            plt.text(j, i, format(cm[i, j], fmt),
+                     horizontalalignment="center",
+                     color="white" if cm[i, j] > thresh else "black")
+
+        plt.tight_layout()
+        plt.ylabel('True label')
+        plt.xlabel('Predicted label')
+        plt.savefig(self.results_dir + '/cm.png')
+        plt.show()
 
 def vis_training(train_points, val_points, num_epochs=0, loss=True, **kwargs):
     """ Visualize losses and accuracies w.r.t each epoch
@@ -73,35 +157,6 @@ def vis_training(train_points, val_points, num_epochs=0, loss=True, **kwargs):
 
     plt.savefig(save_path)
     plt.show()
-
-def plot_confusion_matrix(cm, classes, normalize=False, title='Confusion matrix', cmap=plt.cm.Blues):
-    """
-    This function prints and plots the confusion matrix.
-    Normalization can be applied by setting `normalize=True`.
-    """
-    if normalize:
-        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-        print("Normalized confusion matrix")
-    else:
-        print('Confusion matrix, without normalization')
-
-    plt.imshow(cm, interpolation='nearest', cmap=cmap)
-    plt.title(title)
-    plt.colorbar()
-    tick_marks = np.arange(len(classes))
-    plt.xticks(tick_marks, classes, rotation=45)
-    plt.yticks(tick_marks, classes)
-
-    fmt = '.2f'
-    thresh = cm.max() / 2.
-    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
-        plt.text(j, i, format(cm[i, j], fmt),
-                 horizontalalignment="center",
-                 color="white" if cm[i, j] > thresh else "black")
-
-    plt.tight_layout()
-    plt.ylabel('True label')
-    plt.xlabel('Predicted label')
 
 def plot_roc_curve(gtruth, predictions, num_class):
     from sklearn import metrics

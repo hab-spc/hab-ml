@@ -1,3 +1,9 @@
+""" Create/Modify ResNet models
+
+#TODO model resnet description
+
+"""
+
 import os
 
 import torch
@@ -8,7 +14,14 @@ import collections
 
 
 __all__ = [ 
+    'resnet10',
+    'resnet18',
+    'resnet34',
     'resnet50',
+    'resnet10_dropout',
+    'resnet18_dropout',
+    'resnet34_dropout',
+    'resnet50_dropout',
 ]
 
 
@@ -53,6 +66,22 @@ class ResNet(nn.Module):
         return x
 
     def load_pretrained(self, pretrained_fn):
+        """ Load pretrained model
+
+        Given an initialized model, one can load a pretrained model using
+        this function. It will expect one of the pretrained files from
+        pytorch in order to successfully load it.
+
+        Currently, the user must manually download it using the
+        `download_pretrained.py`, before being able to load a pretrained model
+
+        Args:
+            pretrained_fn (str): Absolute path to the pretrained ResNet model
+
+        Returns:
+            None
+
+        """
         checkpoint = torch.load(pretrained_fn)
         state_dict = self.state_dict()
 #         print('\n' + '='*30+' State Dict Keys '+'='*30)
@@ -89,23 +118,55 @@ class ResNet(nn.Module):
 
         self.load_state_dict(pretrained_fn)
 
+"""BEGIN: ResNet model functions"""
+def resnet10(num_classes=1000):
+    return ResNet(L.BasicResBlock, [1, 1, 1, 1],  [64, 128, 256, 512], [False, True, True, True], num_classes)
+
+def resnet18(num_classes=1000):
+    return ResNet(L.BasicResBlock, [2, 2, 2, 2],  [64, 128, 256, 512], [False, True, True, True], num_classes)
+
+def resnet34(num_classes=1000):
+    return ResNet(L.BasicResBlock, [3, 4, 6, 3],  [64, 128, 256, 512], [False, True, True, True], num_classes)
 
 def resnet50(num_classes=1000):
     return ResNet(L.BottleneckResBlock, [3, 4, 6, 3],  [64*4, 128*4, 256*4, 512*4], [False, True, True, True], num_classes)
 
+def resnet10_dropout(num_classes=1000):
+    return ResNet(L.BasicResBlock, [1, 1, 1, 1],  [64, 128, 256, 512], [False, True, True, True], num_classes, dropout=True)
+
+def resnet18_dropout(num_classes=1000):
+    return ResNet(L.BasicResBlock, [2, 2, 2, 2],  [64, 128, 256, 512], [False, True, True, True], num_classes, dropout=True)
+
+def resnet34_dropout(num_classes=1000):
+    return ResNet(L.BasicResBlock, [3, 4, 6, 3],  [64, 128, 256, 512], [False, True, True, True], num_classes, dropout=True)
+
+def resnet50_dropout(num_classes=1000):
+    return ResNet(L.BottleneckResBlock, [3, 4, 6, 3],  [64*4, 128*4, 256*4, 512*4], [False, True, True, True], num_classes, dropout=True)
+"""END: ResNet model functions"""
+
 
 def create_model(arch, num_classes=1000):
+    """ Create ResNet Model
+
+    Args:
+        arch (str): Desired ResNet version
+        num_classes (int): Number of classes
+
+    Returns:
+        resnet_fn(): Pointer to ResNet model function intialization
+
+    """
     assert arch in __all__
+    # Evaluates string into function representation e.g. `resnet18_dropout()`
     resnet_fcn = eval(arch)
     return resnet_fcn(num_classes)
 
 
 if __name__ == '__main__':
     """Example here of how to initialize model"""
-    device = torch.device("cuda")
-    model = create_model('resnet18', num_classes=15)
+    device = torch.device("cpu")
+    model = create_model('resnet50', num_classes=2)
     print(model)
-    model.cuda()
     
     inp = torch.rand(16, 3, 112, 112)
     inp = inp.to(device)

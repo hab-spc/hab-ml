@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 from pprint import pprint
 import os
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 
 import torch
 
@@ -29,21 +30,17 @@ class Config:
     mode = TRAIN
 
     # Data
-    data_dir = os.path.join(os.path.abspath(os.getcwd()), 'pa4Data')
-    seq_len = 100 #Corresponds to the size of a chunk
+    data_dir = "/data6/lekevin/hab-spc/phytoplankton-db/csv/proro"
 
     # Network
-    network = 'lstm'
+    arch = 'resnet50'
     model_dir = './experiments/default'
-    num_units = 100
-    num_layers = 1
-    num_outputs = 93
-    drop_out = 0
+    input_size = 112
 
     # Training hyperparameters
-    lr = 0.0001
+    lr = 0.001
     epochs = 10
-    batch_size = 1
+    batch_size = 16
 
     # Optimizer
     use_adam = True
@@ -51,22 +48,22 @@ class Config:
     use_adagrad = False
 
     # Pytorch
+    gpu = '4'
     if torch.cuda.is_available():
         num_workers = 4
         pin_memory = True
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpu
     else:
         num_workers = 0
         pin_memory = False
 
     # Training flags
     resume = None
-    print_freq = 500
+    print_freq = 50
     save_freq = 2
     early_stop = True
     estop_threshold = 3
-
-    # Generate Output flags
-    generate_music = True
+    log2file = False
 
 
     def _parse(self, kwargs):
@@ -76,9 +73,9 @@ class Config:
                 raise ValueError('UnKnown Option: "--%s"' % k)
             setattr(self, k, v)
 
-        print('======user config========')
-        pprint(self._state_dict())
-        print('==========end============')
+        # print('======user config========')
+        # pprint(self._state_dict())
+        # print('==========end============')
 
     def _state_dict(self):
         """Return current configuration state

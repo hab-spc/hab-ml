@@ -1,0 +1,9 @@
+lxml
+pandas
+numpy
+matplotlib
+jupyter
+scikit-learn
+scikit-image
+pytorch
+torchvision

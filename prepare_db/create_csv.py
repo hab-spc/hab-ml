@@ -53,6 +53,11 @@ def create_proro_csv(filter_word='proro', data_dir=None):
                 pd_dict['label'] = os.path.basename(p_type)
                 proro_df = proro_df.append(pd.DataFrame(pd_dict))
 
+            # Create image id
+            def create_img_id(x):
+                return os.path.basename(x).split('.')[0]
+            proro_df['image_id'] = proro_df['images'].apply(create_img_id)
+            
             # Save copy of raw data before preprocessing
             fn = 'proro_trainval_raw.csv'
             logger.debug('Saving raw version of dataset as {}'.format(fn))

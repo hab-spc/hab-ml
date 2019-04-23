@@ -1,5 +1,6 @@
 """Trainer"""
 # Standard dist imports
+import logging
 import os
 
 # Third party imports
@@ -34,6 +35,8 @@ class Trainer(object):
             resume: (str) Path to pretrained model
 
         """
+        self.logger = logging.getLogger('trainer')
+
         self.computing_device = self._set_cuda()
 
         self.model = model.to(self.computing_device)
@@ -42,7 +45,7 @@ class Trainer(object):
         if not os.path.isdir(self.model_dir):
             os.makedirs(self.model_dir)
         self.start_epoch = 0
-        self.best_loss = np.inf
+        self.best_err = np.inf
 
         self.optimizer = self._get_optimizer(lr=lr)
         # Defaulted to CrossEntropyLoss
@@ -59,12 +62,12 @@ class Trainer(object):
                 fn = os.path.join(self.model_dir, 'model_best.pth.tar')
             self.load_checkpoint(fn)
 
-    def generate_state_dict(self, epoch, best_loss):
+    def generate_state_dict(self, epoch, best_err):
         """Generate state dictionary for saving weights"""
         return {
                 'epoch': epoch+1,
                 'state_dict': self.model.state_dict(),
-                'best_loss': best_loss,
+                'best_loss': best_err,
                 'optimizer': self.optimizer.state_dict(),
                 'meter': self.meter
         }
@@ -75,19 +78,19 @@ class Trainer(object):
             print("=> loading checkpoint '{}'".format(filename))
             checkpoint = torch.load(filename)
             self.start_epoch = checkpoint['epoch']
-            self.best_loss = checkpoint['best_loss']
+            self.best_err = checkpoint['best_loss']
             self.model.load_state_dict(checkpoint['state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizer'])
-            print("=> loaded checkpoint '{}' (epoch {})"
+            self.logger.info("=> loaded checkpoint '{}' (epoch {})"
                   .format(filename, checkpoint['epoch']))
         else:
-            print("=> no checkpoint found at '{}'".format(filename))
+            self.logger.info("=> no checkpoint found at '{}'".format(filename))
 
     def save_checkpoint(self, state, is_best, filename):
         """Save checkpoint"""
         filename = os.path.join(self.model_dir, filename)
         if is_best:
-            print('=> best model so far, saving...')
+            self.logger.info('=> best model so far, saving...')
             filename = os.path.join(self.model_dir, 'model_best.pth.tar')
         torch.save(state, filename)
 
