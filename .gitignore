@@ -2,6 +2,13 @@
 .idea/*
 phytoplankton-db/*
 Miniconda3-latest-Linux-x86_64.sh
+model/resnet18.pth
+model/resnet34.pth
+model/resnet50.pth
+tensorboardX/*
+rawdata/consisedata.csv
+spc/test/*
+spc/micro_time_period.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

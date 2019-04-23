@@ -13,62 +13,20 @@ from __future__ import print_function, division
 import sys
 import json
 import os
+import pandas as pd
 import numpy as np
 import datetime
 from lxml import html
 import urllib
-import urllib2
-import cookielib
+import http.cookiejar
 import csv
 import pandas as pd
 import argparse
 
+from prepare_db.parse_csv import SPCParser
+
 CAMERAS = ['SPC2' , 'SPCP2', 'SPC-BIG']
 IMG_PARAM = ['image_filename', 'image_id', 'user_labels', 'image_timestamp', 'tags']
-
-def parse_cmds():
-    parser = argparse.ArgumentParser(description='Accessing spc.ucsd.edu pipeline')
-    parser.add_argument('--search-param-file', default=None, help='spc.ucsd.edu search param path')
-    parser.add_argument('--image-output-path', default=None, help='Downloaded images output path')
-    parser.add_argument('--meta-output-path', default=None, help='Meta data output path')
-    parser.add_argument('-d', '--download', default=False, help='Download flagging option')
-    args = parser.parse_args(sys.argv[1:])
-    return args
-
-
-
-def validate_arguments(args):
-    def fatal_error(msg):
-        sys.stderr.write('%s\n' % msg)
-        exit(-1)
-
-    if (args.search_param_file is None):
-        fatal_error("No search param file provided")
-    if (args.search_param_file is not None) and ((args.meta_output_path is None) or (args.image_output_path is None)):
-        fatal_error("No meta/image output path provided")
-    if (args.search_param_file is not None) and (args.download == False) and (args.image_output_path is not None):
-        fatal_error("Download option not flagged")
-    if (args.image_output_path is None) and (args.download == True):
-        fatal_error('No output image path provided.')
-
-
-
-def main(args):
-    from spcserver import SPCServer
-
-    print("Downloading images...")
-    spc = SPCServer()
-    spc.retrieve (textfile=args.search_param_file,
-                  output_dir=args.image_output_path,
-                  output_csv_filename=args.meta_output_path,
-                  download=args.download)
-
-
-
-if __name__ == '__main__':
-    main(parse_cmds())
-
-
 
 class SPCServer(object):
     """ Represents a wrapper class for accessing the spc.ucsd.edu pipeline
@@ -213,61 +171,53 @@ class SPCServer(object):
         # Image url
         self.imgurl = 'http://{}.ucsd.edu{!s}.jpg'
 
+        # Initialize main dataframe
+        df = pd.DataFrame()
 
-        with open(output_csv_filename, 'w') as csv_file:
+        # Loop over number of urls
+        for i in self.data['url']:
+            print('Starting download {}'.format(i))
+            url_to_open = i
 
-            # Initialize output file
-            labelwriter = csv.DictWriter (csv_file, fieldnames=IMG_PARAM)
-            labelwriter.writeheader ()
+            if 'planktivore.ucsd.edu' in url_to_open:
+                server = 'planktivore'
+            else:
+                server = 'spc'
 
-            # Loop over number of urls
-            for i in self.data['url']:
-                print('Starting download {}'.format(i))
-                url_to_open = i
+            # Loop over number of pages per url
+            while(next_page):
 
-                if 'planktivore.ucsd.edu' in url_to_open:
-                    server = 'planktivore'
+                # Load json data for url
+                json_data = json.load(urllib.request.urlopen(url_to_open))
+                next_page = json_data['image_data']['next']
+
+                # Prepare next page of images to open
+                if next_page:
+                    url_to_open = self.inurl.format(server, next_page[21::])
                 else:
-                    server = 'spc'
+                    pass
 
-                # Loop over number of pages per url
-                while(next_page):
+                # Structure json data into dataframe
+                img_dicts = json_data['image_data']['results']
+                temp = pd.DataFrame(json_data['image_data']['results'])
 
-                    # Load json data for url
-                    json_data = json.load(urllib2.urlopen(url_to_open))
-                    next_page = json_data['image_data']['next']
+                # Download data
+                if download:
+                    self._download(server=server,
+                                   img_url=temp['image_url'].tolist())
 
-                    # Prepare next page of images to open
-                    if next_page:
-                        url_to_open = self.inurl.format(server, next_page[21::])
-                    else:
-                        pass
+                # Preprocess data
+                temp = self._preprocess(temp)
 
-                    img_dicts = json_data['image_data']['results']
-                    for ii in range(len(img_dicts)):
+                # Append back into main dataframe
+                #TODO time speed for appending dataframe of 500 to another
+                df = df.append(temp).reset_index(drop=True)
 
-                        # Parse for image data
-                        img_url = img_dicts[ii]['image_url']
-                        img = img_url.split ('/')[6] + ".jpg"
-                        img_id = img_dicts[ii]['image_id']
-                        img_label = [str(i) for i in img_dicts[ii]['user_labels']]
-                        img_timestamp = img_dicts[ii]['image_timestamp'].encode('utf-8')
-                        tags = [str(i) for i in img_dicts[ii]['tags']]
+            next_page = None
 
-                        # Store into output csv file
-                        labelwriter.writerow ({'image_filename': str (img),
-                                               'image_id': str (img_id),
-                                               "image_timestamp": img_timestamp,
-                                               'user_labels': img_label,
-                                               'tags': tags})
-
-                        # Download images
-                        if download:
-                            self._download(server=server, img_url=img_url)
-
-                next_page = 'empty'
-        csv_file.close()
-
+        # Save to csv file
+        df.to_csv(output_csv_filename, index=False)
+        print('Download complete')
 
 
     @staticmethod
@@ -303,10 +253,10 @@ class SPCServer(object):
         assert isinstance(account_info, dict)
         assert isinstance(login_url, str)
 
-        cj = cookielib.CookieJar()
-        self.opener = urllib2.build_opener(
-            urllib2.HTTPCookieProcessor(cj),
-            urllib2.HTTPHandler(debuglevel=1)
+        cj = http.cookiejar.CookieJar()
+        self.opener = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(cj),
+            urllib.request.HTTPHandler(debuglevel=1)
         )
 
         if login_url == None:
@@ -319,7 +269,7 @@ class SPCServer(object):
             '//input[@name="csrfmiddlewaretoken"]/@value')[0]
 
         params = json.dumps(account_info)
-        req = urllib2.Request ('{}/rois/login_user'.format(self.parsed_url),
+        req = urllib.Request('{}/rois/login_user'.format(self.parsed_url),
                                params, headers={'X-CSRFToken': str (self.csrf_token),
                                                 'X-Requested-With': 'XMLHttpRequest',
                                                 'User-agent': 'Mozilla/5.0',
@@ -358,10 +308,10 @@ class SPCServer(object):
         :return:
         """
 
-        # Log errors with label uploads
+        #TODO Log errors with label
         try:
             self.submit_json = json.dumps(self.submit_dict)
-            self.req1 = urllib2.Request('{}/rois/label_images'.format(self.parsed_url),
+            self.req1 = urllib.Request('{}/rois/label_images'.format(self.parsed_url),
                            self.submit_json, headers={'X-CSRFToken': str(self.csrf_token),
                                                  'X-Requested-With': 'XMLHttpRequest',
                                                  'User-agent': 'Mozilla/5.0',
@@ -466,7 +416,8 @@ class SPCServer(object):
         #TODO include option for parsing labels and type of annotator
 
         # Build url
-        pattern = "http://{}.ucsd.edu/data/rois/images/{}/{!s}/{!s}/0/24/500/{!s}/{!s}/0.05/1/noexclude/ordered/skip/any/any/any/"
+        #TODO specify actual constants within url ??? = 'Any'
+        pattern = "http://{}.ucsd.edu/data/rois/images/{}/{!s}/{!s}/0/24/500/{!s}/{!s}/0.05/1/noexclude/ordered/skip/Any/anytype/Any/Any/"
         self.data['url'] = self.data.apply(
             lambda row: pattern.format('spc' if row.start_time < 1501488000000 else 'planktivore',
                                                 row.cam, row.start_time, row.end_time,
@@ -475,12 +426,34 @@ class SPCServer(object):
     def _download(self, server, img_url):
         ''' Downloads image to desired output directory
 
-        :param img_url: string parsed from json_data during retrieval
+        :param img_url: list containing strings parsed from json_data during
+            retrieval
         :return:
         '''
-        srcpath = self.imgurl.format(server, img_url)
-        destpath = self.output_dir.format(os.path.basename(img_url))
-        urllib.urlretrieve(srcpath, destpath)
+        assert isinstance(img_url, list), 'Store Image URLs in list'
+        for ii, url in enumerate(img_url):
+            srcpath = self.imgurl.format(server, url)
+            destpath = self.output_dir.format(os.path.basename(url))
+            urllib.request.urlretrieve(srcpath, destpath)
+
+    def _preprocess(self, dataframe):
+        """Preprocess dataframe"""
+
+        """
+        separate timestamps into date and time columns (all numerical)
+        make sure all of the column types are good
+        """
+        df = SPCParser.extract_dateinfo(dataframe,
+                                          date_col='image_timestamp',
+                                          drop=True, time=True)
+
+        #TODO Clean up labels here
+        # labels are only specific for cleaning prorocentrum labels atm
+        df = SPCParser.clean_labels(data=df, label_col='user_labels')
+
+        #TODO clean up tags here
+        return df
+
 
 
 

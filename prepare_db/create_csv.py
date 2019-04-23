@@ -21,22 +21,23 @@ import pandas as pd
 #TODO log dataset statistics from this
 from utils.logger import Logger
 from data.d_utils import train_val_split, preprocess_dataframe
+from prepare_db.parse_csv import SPCParser
 
 # Module level constants
-DATA_DIR = '/data6/lekevin/hab-spc/phytoplankton-db'
 
-def create_proro_csv(filter_word='proro', output_dir=DATA_DIR+'/csv/proro'):
+def create_proro_csv(filter_word='proro', data_dir=None):
+    output_dir = os.path.join(data_dir, 'csv/proro')
     Logger(os.path.join(output_dir, 'proro_csv.log'), logging.DEBUG,
            log2file=False)
     Logger.section_break('Create Proro-CSV')
     logger = logging.getLogger('create-csv')
 
-    proro_dir = [f for f in os.listdir(DATA_DIR) if filter_word in f][::-1]
+    proro_dir = [f for f in os.listdir(data_dir) if filter_word in f][::-1]
 
     proro_df = pd.DataFrame()
 
     for p_dir in proro_dir:
-        data_dir_ = os.path.join(DATA_DIR, p_dir)
+        data_dir_ = os.path.join(data_dir, p_dir)
 
         TRAINVAL = 'trainval' in data_dir_
         logger.info('Creating csv for {}'.format(p_dir))
@@ -86,48 +87,56 @@ def create_proro_csv(filter_word='proro', output_dir=DATA_DIR+'/csv/proro'):
 
 # create_proro_csv()
 
-def create_density_csv():
-    data_dir = '/data6/lekevin/hab-spc'
-    micro_Data = pd.read_csv(os.path.join(data_dir, "rawdata/Micro_data.csv"))
-    #TODO prediction counts should come from proro_<PARTITION>.csv files
-    image_Data = pd.read_csv(os.path.join(data_dir, "rawdata/Image_data.csv"),
-                             skiprows=[1, 2, 3])
+def create_density_csv(output_dir, micro_csv, image_csv,
+                       log_fname='density_csv.log',
+                       csv_fname='Density_data.csv'):
+    """ Create density estimate csv file for validation generation
 
-    # Process Image_data to merge with microscopy data
-    image_Data = image_Data[['Start Date & Time', 'End Date & Time',
-                             '# Non-Proro detected', '# Proro detected']]
-    image_Data['Date'] = image_Data['Start Date & Time'].str.split(' ').str[0]
-    image_Data['Date'] = pd.to_datetime(image_Data['Date'])
-    image_Data['Date'] = image_Data['Date'].dt.strftime('%Y-%m-%d')
+    Args:
+        output_dir (str): Absolute path to output directory
+        micro_csv (str): Absolute path to microscopy csv file
+        image_csv (str): Absolute path to spc image csv file
+
+    Returns:
+        None
+
+    """
+    Logger(os.path.join(output_dir, log_fname), logging.DEBUG,
+           log2file=False)
+    Logger.section_break('Create Density-CSV')
+    logger = logging.getLogger('create-csv')
+
+    micro_data = pd.read_csv(micro_csv)
+    #TODO prediction counts should come from proro_<PARTITION>.csv files
+    image_data = pd.read_csv(image_csv)
+
+    # Filter Image_data into filtered day estimates
+    time_col = 'Date'
+    image_data = SPCParser.filter_time(image_data, time_col=time_col)
+
+    # Get cell counts from Image_Data
+    image_data = SPCParser.get_cell_count(image_data)
 
     # Process Microscopy_data
     CSV_COLUMNS = 'Date,Prorocentrum micans (Cells/L),Total Phytoplankton (Cells/L)'
-    micro_Data = micro_Data.rename(columns={'Date\n\nmm/dd/yy': "Date"}, index=str)
-    micro_Data['Date'] = pd.to_datetime(micro_Data['Date']).dt.strftime('%Y-%m-%d')
-    micro_Data = micro_Data[CSV_COLUMNS.split(',')]
+    micro_data = micro_data.rename(columns={'Date\n\nmm/dd/yy': time_col}, index=str)
+    micro_data[time_col] = pd.to_datetime(micro_data[time_col]).dt.strftime('%Y-%m-%d')
+    micro_data = micro_data[CSV_COLUMNS.split(',')]
 
     # Merge two data types
-    density_Data = micro_Data.merge(image_Data, on='Date')
+    density_Data = micro_data.merge(image_data, on='Date')
 
     # Rename columns for simplicity
     rename_dict = {'Prorocentrum micans (Cells/L)': 'micro_proro',
-                   'Total Phytoplankton (Cells/L)': 'micro_total-phyto',
-                   'Start Date & Time': 'image_start-datetime',
-                   'End Date & Time': 'image_end-datetime',
-                   '# Non-Proro detected': 'image_non-proro',
-                   '# Proro detected': 'image_proro'}
+                   'Total Phytoplankton (Cells/L)': 'micro_total-phyto'}
     density_Data = density_Data.rename(columns=rename_dict, index=str)
 
-    # Compute total phytoplankton
-    density_Data['image_total-phyto'] = density_Data['image_non-proro'] + \
-                                        density_Data['image_proro']
-
     # Save as raw data
-    fname = os.path.join(data_dir, 'rawdata/Density_data.csv')
+    fname = os.path.join(output_dir, csv_fname)
     density_Data.to_csv(fname, index=False)
+    logger.info('CSV Completed. Saved to {}'.format(fname))
 
 
-
-create_density_csv()
-
+# data_dir = '/data6/lekevin/hab-spc'
+# create_density_csv(data_dir)
 
