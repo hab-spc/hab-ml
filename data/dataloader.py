@@ -24,7 +24,7 @@ from torch.autograd import Variable
 # Project level imports
 from utils.config import opt
 from utils.constants import *
-from data.prepare_db import create_proro_csv, prepare_db
+from data.prepare_db import create_proro_csv, prepare_db, create_lab_csv
 from data.d_utils import clean_up
 
 # Module level constants
@@ -127,7 +127,10 @@ class SPCHABDataset(Dataset):
         #TODO refactor code to accept abs path to csv_file rather than
         # assembling with data_root
         if self.mode == DEPLOY:
-            csv_file = data_root # Absolute path to the deploy_data
+            if os.path.isdir(data_root):
+                csv_file = create_lab_csv(data_root)
+            else:
+                csv_file = data_root # Absolute path to the deploy_data
             deploy_prep = True
         else:
             csv_file = os.path.join(data_root,'proro_{}.csv').format(mode)
@@ -211,7 +214,11 @@ class SPCHABDataset(Dataset):
 
 
     def check_SPCformat(self, prepare_db_flag=False):
-        """Check if SPCFormat for dataset preparation"""
+        """Check if SPCFormat for dataset preparation
+
+        #check if dir or file
+        if directory
+        """
         class_constants = [value for name, value in vars(SPCData).items()
                            if not name.startswith('__')]
         for col_name in class_constants:
@@ -269,25 +276,24 @@ if __name__ == '__main__':
     import time
     import sys
     DEBUG_DATALODER = False
-    DEBUG_SPCHAB = True
+    DEBUG_SPCHAB = False
+    SPICI = False
 
     """Example of running data loader"""
-    if DEBUG_DATALODER:
-        batch_size = 16
-        data_dir = '/data6/lekevin/hab-spc/phytoplankton-db/csv/proro1'
-        loader = get_dataloader(data_dir=data_dir, batch_size=batch_size,
-                                num_workers=2)[TRAIN]
-        print(len(loader.dataset))
-        for i, batch in enumerate(loader):
-            img = batch['rgb'].numpy()
+    if DEBUG_SPCHAB:
+        if SPICI:
+            deploy_data = '/data6/lekevin/hab-master/hab-spc/data/experiments/test_deploy_classifier.csv'
+        else:
+            deploy_data = '/data6/phytoplankton-db/hab_invitro/images/20190515_static_html/images/00000'
+        data_loader = get_dataloader(mode=DEPLOY, data_dir=deploy_data,
+                                     batch_size=opt.batch_size,
+                                     input_size=opt.input_size)
+        print(len(data_loader))
+        for i, batch in enumerate(data_loader):
+            img = batch['images'].numpy()
             lbl = batch['label'].numpy()
             print(i, img.shape, img.min(), img.max(), img.dtype)
             print(i, lbl.shape, lbl.min(), lbl.max(), lbl.dtype)
-            break
-
-    if DEBUG_SPCHAB:
-        deploy_data = '/data6/lekevin/hab-master/hab-spc/phytoplankton-db/csv/proro/field_2017.csv'
-        dataset = SPCHABDataset(deploy_data, mode=DEPLOY,
-                                input_size=opt.input_size)
+            print(batch['image_id'])
 
 

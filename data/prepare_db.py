@@ -24,6 +24,7 @@ import pandas as pd
 # Project level imports
 #TODO log dataset statistics from this
 from utils.logger import Logger
+from utils.constants import SPCData as sd
 from data.d_utils import train_val_split, preprocess_dataframe
 from spc.spcserver import SPCServer
 from spc.spctransformer import SPCDataTransformer
@@ -65,6 +66,17 @@ def prepare_db(data=None, image_dir=None, csv_file=None, save=False,
         tf_df.to_csv(csv_file, index=False)
 
     return tf_df
+
+def create_lab_csv(data_root):
+    import glob
+    import pandas as pd
+    data_root += '_static_html'
+    images = glob.glob(os.path.join(data_root, 'images', '00000', '*-.jpeg'))
+    img_id = [os.path.basename(i).replace('.jpeg', '.tif') for i in images]
+    df = pd.DataFrame({sd.IMG: images, sd.ID:img_id, sd.LBL: 0, sd.USR_LBL:0})
+    csv_fname = os.path.join(data_root, 'meta.csv')
+    df.to_csv(csv_fname, index=False)
+    return csv_fname
 
 
 def create_proro_csv(filter_word='proro', data_dir=None):

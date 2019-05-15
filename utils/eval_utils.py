@@ -1,4 +1,5 @@
 import itertools
+import json
 import os
 import math
 
@@ -41,6 +42,12 @@ def accuracy(predictions, targets, axis=1):
     hits = predictions.eq(targets)
     acc = 100. * hits.sum().float() / float(batch_size)
     return acc
+
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
 
 class EvalMetrics(object):
     def __init__(self, classes, predictions=[], gtruth=[], ids=[],
@@ -121,7 +128,8 @@ class EvalMetrics(object):
         plt.savefig(self.results_dir + '/cm.png')
         plt.show()
 
-    def save_predictions(self, start_datetime=None):
+    def save_predictions(self, start_datetime=None, run_time=0,
+                         model_version=None, dest_dir=None):
         """Load predictions into json file"""
         from datetime import datetime
         import json
@@ -132,25 +140,26 @@ class EvalMetrics(object):
         json_dict = {
             'start-datetime': start_datetime,
             'end-datetime': datetime.today().strftime(date_fmt),
+            'total-samples': total_smpls,
+            'run_time': run_time,
+            'model_version': model_version,
             'machine_labels': [],
-            'total-samples': total_smpls
         }
-        i = 0
-        # for i in range(total_smpls):
-        # dd = [self.ids[i], int(self.gtruth[i]), int(self.predictions[i]),
-        #       self.probabilities[i].tolist()]
-        key_fmt = ['image_id', 'gtruth', 'pred']
-        dd = [self.ids[i], int(self.gtruth[i]), int(self.predictions[i])]
-        params = dict(zip(key_fmt, dd))
-        json_dict['machine_labels'].append(params)
+        for i in range(total_smpls):
+            dd = [self.ids[i], int(self.gtruth[i]), int(self.predictions[i]),
+                  self.probabilities[i]]
+            key_fmt = ['image_id', 'gtruth', 'pred', 'prob']
+        # dd = [self.ids[i], int(self.gtruth[i]), int(self.predictions[i])]
+            params = dict(zip(key_fmt, dd))
+            json_dict['machine_labels'].append(params)
 
         # Save as json file
-        hard_code_dir = '/data6/lekevin/hab-master/hab-spc/experiments/proro_run'
-        json_fname = os.path.join(hard_code_dir, 'predictions.json')
+        json_fname = os.path.join(dest_dir, 'predictions.json')
         with open(json_fname, 'w', encoding='utf-8') as json_file:
             json.dump(json_dict, json_file, indent=4, separators=(',', ':'),
-                      sort_keys=True)
+                      sort_keys=True, cls=NumpyEncoder)
         json_file.close()
+        print('Predictions saved to {}'.format(json_fname))
 
 
 def vis_training(train_points, val_points, num_epochs=0, loss=True, **kwargs):

@@ -39,7 +39,7 @@ LOG2FILE = 'log2file'
 
 # Deploy Hyperparameters
 DEPLOY_DATA = 'deploy_data'
-
+LAB_CONFIG = 'lab_config'
 class SPCData():
     USR_LBL = 'user_labels'
     ID = 'image_id'

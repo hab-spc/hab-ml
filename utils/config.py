@@ -67,6 +67,7 @@ class Config:
     log2file = False
 
     # Deploy Hyperparameters
+    lab_config = False
     deploy_data = None
 
     def _parse(self, kwargs):

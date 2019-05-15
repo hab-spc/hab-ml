@@ -357,7 +357,9 @@ def deploy(opt, logger=None):
         model=trainer.model, trainer=trainer, data_loader=data_loader,
         logger=logger, tb_logger=tb_logger)
 
-    metrics.save_predictions(start_datetime)
+    dest_dir = opt.deploy_data + '_static_html' if opt.lab_config else os.path.abspath(opt.deploy_data)
+    metrics.save_predictions(start_datetime, run_time.avg, opt.model_dir,
+                             dest_dir)
 
 if __name__ == '__main__':
     #TODO write out help description
@@ -385,6 +387,7 @@ if __name__ == '__main__':
 
     # Deploy hyperparameters
     parser.add_argument('--deploy_data', type=str, default=opt.deploy_data)
+    parser.add_argument('--lab_config', dest='lab_config', action='store_true')
 
 
 
@@ -410,11 +413,13 @@ if __name__ == '__main__':
     save_freq = arguments.pop(SAVE_FREQ)
     log2file = arguments.pop(LOG2FILE)
     deploy_data = arguments.pop(DEPLOY_DATA)
+    lab_config = arguments.pop(LAB_CONFIG)
     opt = set_config(mode=mode, arch=arch, model_dir=model_dir, data_dir=data_dir,
                      lr=lr, epochs=epochs, batch_size=batch_size,
                      input_size=input_size, gpu=gpu, resume=resume,
                      print_freq=print_freq, save_freq=save_freq,
-                     log2file=log2file, deploy_data=deploy_data)
+                     log2file=log2file, deploy_data=deploy_data,
+                     lab_config=lab_config)
 
     # Initialize Logger
     Logger(log_filename=os.path.join(opt.model_dir, '{}.log'.format(opt.mode)),
