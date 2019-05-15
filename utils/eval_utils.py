@@ -6,8 +6,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch.nn as nn
 
-import warnings
-warnings.filterwarnings("ignore")
+import logging
+mpl_logger = logging.getLogger('matplotlib')
+mpl_logger.setLevel(logging.WARNING)
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -42,18 +43,20 @@ def accuracy(predictions, targets, axis=1):
     return acc
 
 class EvalMetrics(object):
-    def __init__(self, classes, predictions=[], gtruth=[], model_dir=''):
+    def __init__(self, classes, predictions=[], gtruth=[], ids=[],
+                 model_dir=''):
         self.num_class = len(classes)
         self.classes = classes
         self.predictions = predictions
         self.gtruth = gtruth
+        self.ids = ids
         self.results_dir = os.path.join(model_dir, 'figs')
         if not os.path.exists(self.results_dir):
             os.makedirs(self.results_dir)
         self.probabilities = []
         self.softmax = nn.Softmax()
 
-    def update(self, predictions, targets, axis=1):
+    def update(self, predictions, targets, ids, axis=1):
         # TODO save image id along with predicitons to save back to image files
         probs = self.softmax(predictions).detach().data.cpu().numpy()
         self.probabilities.extend(probs)
@@ -64,6 +67,9 @@ class EvalMetrics(object):
 
         targets = targets.detach().data.cpu().numpy().astype(int)
         self.gtruth.extend(targets)
+
+        ids = ids
+        self.ids.extend(ids)
 
     def compute_cm(self, plot=False):
         # Create array for confusion matrix with dimensions based on number of classes
@@ -114,6 +120,38 @@ class EvalMetrics(object):
         plt.xlabel('Predicted label')
         plt.savefig(self.results_dir + '/cm.png')
         plt.show()
+
+    def save_predictions(self, start_datetime=None):
+        """Load predictions into json file"""
+        from datetime import datetime
+        import json
+        date_fmt = '%Y-%m-%d_%H:%M:%S'
+
+        key_fmt = ['image_id', 'gtruth', 'pred', 'prob']
+        total_smpls = len(self.ids)
+        json_dict = {
+            'start-datetime': start_datetime,
+            'end-datetime': datetime.today().strftime(date_fmt),
+            'machine_labels': [],
+            'total-samples': total_smpls
+        }
+        i = 0
+        # for i in range(total_smpls):
+        # dd = [self.ids[i], int(self.gtruth[i]), int(self.predictions[i]),
+        #       self.probabilities[i].tolist()]
+        key_fmt = ['image_id', 'gtruth', 'pred']
+        dd = [self.ids[i], int(self.gtruth[i]), int(self.predictions[i])]
+        params = dict(zip(key_fmt, dd))
+        json_dict['machine_labels'].append(params)
+
+        # Save as json file
+        hard_code_dir = '/data6/lekevin/hab-master/hab-spc/experiments/proro_run'
+        json_fname = os.path.join(hard_code_dir, 'predictions.json')
+        with open(json_fname, 'w', encoding='utf-8') as json_file:
+            json.dump(json_dict, json_file, indent=4, separators=(',', ':'),
+                      sort_keys=True)
+        json_file.close()
+
 
 def vis_training(train_points, val_points, num_epochs=0, loss=True, **kwargs):
     """ Visualize losses and accuracies w.r.t each epoch

@@ -21,18 +21,16 @@ from torch.utils.data import Dataset
 import torchvision.transforms as transforms
 from torch.autograd import Variable
 
-import skimage.util
-import skimage.color
-import scipy.ndimage
-import scipy.misc
-
 # Project level imports
 from utils.config import opt
 from utils.constants import *
-from prepare_db.create_csv import create_proro_csv
+from data.prepare_db import create_proro_csv, prepare_db
+from data.d_utils import clean_up
 
 # Module level constants
+#TODO make this dictionary dynamic according to the data loaded
 CLASSES = {0: 'Non-Prorocentrum', 1: 'Prorocentrum'}
+UNKNOWN = {999: 'Unknown'}
 NUM_CLASSES = len(CLASSES.keys())
 DEVELOP = False
 
@@ -107,7 +105,9 @@ class SPCHABDataset(Dataset):
         """Initializes SPCHabDataset
 
         Args:
-            data_root (str): Absolute path to the data csv files
+            data_root (str): Absolute path to the csv dir. If in
+                deploy mode it should be the absolute path to the csv file
+                itself
             mode (str): Mode/partition of the dataset
             input_size (int): Image input size
 
@@ -118,32 +118,48 @@ class SPCHABDataset(Dataset):
             class_to_index(dict): Dictionary of each class with its
                 associated images
         """
-        assert mode in ('train', 'val'), 'mode should be train or val'
+        assert mode in (TRAIN, VAL, DEPLOY), 'mode: train, val, deploy'
         self.mode = mode
         self.input_size = input_size
         self.rescale_size = input_size
+
         # PROROCENTRUM csv files
-        csv_file = os.path.join(data_root,'proro_{}.csv').format(mode)
+        #TODO refactor code to accept abs path to csv_file rather than
+        # assembling with data_root
+        if self.mode == DEPLOY:
+            csv_file = data_root # Absolute path to the deploy_data
+            deploy_prep = True
+        else:
+            csv_file = os.path.join(data_root,'proro_{}.csv').format(mode)
         self.data = pd.read_csv(csv_file)
+
         if DEVELOP:
             self.data = self.data.sample(n=100).reset_index(drop=True)
 
+        if self.check_SPCformat():
+            image_dir = self._get_image_dir(data_root)
+            self.data = prepare_db(data=self.data, image_dir=image_dir,
+                                   csv_file=csv_file)
+
         # Clarify what transformations are needed here
         self.data_transform = {
-            'train': transforms.Compose([transforms.Resize(self.rescale_size),
+            TRAIN: transforms.Compose([transforms.Resize(self.rescale_size),
                                        transforms.RandomCrop(input_size),
                                        transforms.ColorJitter()]),
-            'val':  transforms.Compose([transforms.Resize(self.rescale_size),
+            VAL:  transforms.Compose([transforms.Resize(self.rescale_size),
+                                       transforms.CenterCrop(input_size)]),
+            DEPLOY: transforms.Compose([transforms.Resize(self.rescale_size),
                                        transforms.CenterCrop(input_size)])
         }
         
-        self.classes = sorted(self.data['label'].unique())
+        self.classes = sorted(CLASSES.values())
         self.num_class = len(self.classes)
-        self.class_to_index = {}
-        for cls in self.classes:
-            # self.class_to_index[cls] = self.data.loc[self.data['label'] == cls, "images"]
-            self.class_to_index[cls] = self.data.index[self.data['label'] == cls].tolist()
-
+        if mode in [TRAIN, VAL]:
+            self.class_to_index = {}
+            for cls in self.classes:
+                # self.class_to_index[cls] = self.data.loc[self.data['label'] == cls, "images"]
+                self.class_to_index[cls] = self.data.index[self.data[SPCData.LBL] ==
+                                                           cls].tolist()
 
     def __len__(self):
         return len(self.data)
@@ -158,18 +174,22 @@ class SPCHABDataset(Dataset):
 
         """
         # Load image
-        img_link = self.data.iloc[index]["images"]
+        img_link = self.data.iloc[index][SPCData.IMG]
         img = pil_loader(img_link)
         img = self.data_transform[self.mode](img)
         img = rgb_preproc(pil2numpy(img))
         img = numpy2tensor(img)
 
-        target = self.data.iloc[index]["label"]
-        target = self.encode_labels(target)
+        target = self.data.iloc[index][SPCData.LBL]
+        if not isinstance(target, (int, np.int64)):
+            target = self.encode_labels(target)
 
-        id = self.data.iloc[index]['image_id']
+        if SPCData.ID in self.data.columns.values:
+            id = self.data.iloc[index][SPCData.ID]
+        else:
+            id = 0
 
-        return {'rgb': img, 'label': target, 'id':id}
+        return {SPCData.IMG: img, SPCData.LBL: target, SPCData.ID:id}
     
     def encode_labels(self, label):
         """ Encode labels given the enumerated class index
@@ -189,11 +209,36 @@ class SPCHABDataset(Dataset):
                 cls_idx_lbl = idx
                 return cls_idx_lbl
 
+
+    def check_SPCformat(self, prepare_db_flag=False):
+        """Check if SPCFormat for dataset preparation"""
+        class_constants = [value for name, value in vars(SPCData).items()
+                           if not name.startswith('__')]
+        for col_name in class_constants:
+            if col_name not in self.data.columns.values:
+                prepare_db_flag = True
+                break
+
+        if prepare_db_flag:
+            return True
+        else:
+            return False
+
+    def _get_image_dir(self, data_root):
+        """Get image dir"""
+        master_db_dir = '/data6/lekevin/hab-master/hab-spc/phytoplankton-db'
+        img_dir = os.path.basename(data_root).split('.')[0]
+        img_dir = os.path.join(master_db_dir, img_dir)
+        if os.path.isdir(img_dir):
+            return img_dir
+
+
 def get_dataloader(data_dir, batch_size=1, input_size=112, shuffle=True,
-                   num_workers=4):
+                   num_workers=4, mode=TRAIN):
     """ Get the dataloader
 
     Args:
+        mode (str):
         data_dir (str): Absolute path to the csv data files
         batch_size (int): Batch size
         input_size (int): Image input size
@@ -205,40 +250,44 @@ def get_dataloader(data_dir, batch_size=1, input_size=112, shuffle=True,
 
     """
     # Create dataset if it hasn't been created
-    if not os.path.exists(data_dir) or len(os.listdir(data_dir)) == 0:
-        print('Data dir not detected. Creating dataset @ {}'.format(data_dir))
-        create_proro_csv(output_dir=data_dir, log2file=True)
-    
-    loader_dict = {}
+    if mode in [TRAIN, VAL]:
+        if not os.path.exists(data_dir) or len(os.listdir(data_dir)) == 0:
+            print('Data dir not detected. Creating dataset @ {}'.format(data_dir))
+            create_proro_csv(output_dir=data_dir, log2file=True)
+    else:
+        if not os.path.exists(data_dir):
+            raise ValueError('File does not exist')
 
-    train_dataset = SPCHABDataset(data_dir, mode="train",
+    dataset = SPCHABDataset(data_dir, mode=mode,
                                 input_size=input_size)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size,
+    data_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
                                                shuffle=shuffle, num_workers=num_workers,
                                                pin_memory=True)
-    loader_dict["train"] = train_loader
-
-    val_dataset = SPCHABDataset(data_dir, mode="val",
-                                input_size=input_size)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size,
-                                             shuffle=shuffle, num_workers=num_workers,
-                                             pin_memory=True)
-    loader_dict["val"] = val_loader
-    
-    return loader_dict
+    return data_loader
 
 if __name__ == '__main__':
     import time
     import sys
+    DEBUG_DATALODER = False
+    DEBUG_SPCHAB = True
+
     """Example of running data loader"""
-    batch_size = 16
-    data_dir = '/data6/lekevin/hab-spc/phytoplankton-db/csv/proro1'
-    loader = get_dataloader(data_dir=data_dir,
-                            batch_size=batch_size, num_workers=2)["train"]
-    print(len(loader.dataset))
-    for i, batch in enumerate(loader):
-        img = batch['rgb'].numpy()
-        lbl = batch['label'].numpy()
-        print(i, img.shape, img.min(), img.max(), img.dtype)
-        print(i, lbl.shape, lbl.min(), lbl.max(), lbl.dtype)
-        break
+    if DEBUG_DATALODER:
+        batch_size = 16
+        data_dir = '/data6/lekevin/hab-spc/phytoplankton-db/csv/proro1'
+        loader = get_dataloader(data_dir=data_dir, batch_size=batch_size,
+                                num_workers=2)[TRAIN]
+        print(len(loader.dataset))
+        for i, batch in enumerate(loader):
+            img = batch['rgb'].numpy()
+            lbl = batch['label'].numpy()
+            print(i, img.shape, img.min(), img.max(), img.dtype)
+            print(i, lbl.shape, lbl.min(), lbl.max(), lbl.dtype)
+            break
+
+    if DEBUG_SPCHAB:
+        deploy_data = '/data6/lekevin/hab-master/hab-spc/phytoplankton-db/csv/proro/field_2017.csv'
+        dataset = SPCHABDataset(deploy_data, mode=DEPLOY,
+                                input_size=opt.input_size)
+
+

@@ -9,6 +9,8 @@ tensorboardX/*
 rawdata/consisedata.csv
 spc/test/*
 spc/micro_time_period.txt
+data/experiments/*
+data/spici/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -35,8 +35,8 @@ class Trainer(object):
             resume: (str) Path to pretrained model
 
         """
+        logging.basicConfig(level=logging.DEBUG)
         self.logger = logging.getLogger('trainer')
-
         self.computing_device = self._set_cuda()
 
         self.model = model.to(self.computing_device)
@@ -121,6 +121,9 @@ class Trainer(object):
         if use_cuda:
             computing_device = torch.device("cuda")
             print("CUDA is supported")
+            self.logger.debug('PYTORCH Version: {}'.format(torch.__version__))
+            self.logger.debug('CUDA Version: {}'.format(torch.version.cuda))
         else:
             computing_device = torch.device("cpu")
+        
         return computing_device

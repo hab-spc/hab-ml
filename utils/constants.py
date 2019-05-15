@@ -21,7 +21,7 @@ BEST_LOSS = 'best_loss'
 MODE = 'mode'
 MODEL_DIR = 'model_dir'
 DATA_DIR = 'data_dir'
-TRAIN = 'train'; VAL = 'val'; TEST = 'test'
+TRAIN = 'train'; VAL = 'val'; DEPLOY = 'deploy'
 IMG = 'images'; LBL = 'labels'
 TRANSFORM = 'transform'
 INPUT_SIZE = 'input_size'
@@ -36,3 +36,12 @@ GPU = 'gpu'
 PRINT_FREQ = 'print_freq'
 SAVE_FREQ = 'save_freq'
 LOG2FILE = 'log2file'
+
+# Deploy Hyperparameters
+DEPLOY_DATA = 'deploy_data'
+
+class SPCData():
+    USR_LBL = 'user_labels'
+    ID = 'image_id'
+    IMG = 'images'
+    LBL = 'label'

@@ -18,10 +18,12 @@ import argparse
 import logging
 import os
 import sys
-sys.path.insert(0, '/data6/lekevin/hab-spc/')
+#TODO change this to be dynamic
+sys.path.insert(0, '/data6/lekevin/hab-master/hab-spc/')
 #TODO figure out why module imports aren't working
 from pprint import pformat
 import time
+from datetime import datetime
 
 # Third party imports
 from tensorboardX import SummaryWriter
@@ -33,10 +35,10 @@ from model import resnet
 from trainer import Trainer
 from data.dataloader import get_dataloader, to_cuda
 from utils.constants import *
+from utils.constants import SPCData as sd
 from utils.config import opt, set_config
 from utils.eval_utils import accuracy, get_meter, EvalMetrics
 from utils.logger import Logger
-
 
 # Module level constants
 
@@ -57,11 +59,17 @@ def train_and_evaluate(opt, logger=None, tb_logger=None):
         None
 
     """
+
+    #TODO implement Early Stopping
+    #TODO implement test code
+    
     logger = logger if logger else logging.getLogger('train-and-evaluate')
 
     # Read in dataset
     # check the path for the data loader to make sure it is loading the right data set
-    data_loader = get_dataloader(opt.data_dir, batch_size=opt.batch_size)
+    data_loader = {mode: get_dataloader(opt.data_dir,
+                                        batch_size=opt.batch_size,
+                                        mode=mode) for mode in [TRAIN, VAL]}
 
     # Initialize model
     model = resnet.create_model(arch='resnet50', num_classes=2)
@@ -108,7 +116,7 @@ def train_and_evaluate(opt, logger=None, tb_logger=None):
             else:
                 trainer.save_checkpoint(state, is_best=is_best,
                                         filename='model_best.pth.tar')
-    elif opt.mode in [VAL, TEST]:
+    elif opt.mode == VAL:
         err, acc, run_time, metrics = evaluate(
             model=trainer.model, trainer=trainer, data_loader=data_loader[
                 opt.mode], logger=logger, tb_logger=tb_logger)
@@ -169,9 +177,9 @@ def train(model, trainer, train_loader, epoch, logger, tb_logger,
     end = time.time()
     for i, batch in enumerate(train_loader):
         # process batch items: images, labels
-        img = to_cuda(batch['rgb'], trainer.computing_device)
-        target = to_cuda(batch['label'], trainer.computing_device, label=True)
-
+        img = to_cuda(batch[sd.IMG], trainer.computing_device)
+        target = to_cuda(batch[sd.LBL], trainer.computing_device, label=True)
+        id = batch[sd.ID]
 
         # measure data loading time
         meter['data_time'].update(time.time() - end)
@@ -250,9 +258,9 @@ def evaluate(model, trainer, data_loader, epoch=0,
 
     # Initialize meter and metrics
     meter = get_meter(meters=['batch_time', 'loss', 'acc'])
-    predictions, gtruth = [], []
+    predictions, gtruth, ids = [], [], []
     classes = data_loader.dataset.classes
-    metrics = EvalMetrics(classes, predictions, gtruth, trainer.model_dir)
+    metrics = EvalMetrics(classes, predictions, gtruth, ids, trainer.model_dir)
 
     # Switch to evaluate mode
     model.eval()
@@ -260,8 +268,9 @@ def evaluate(model, trainer, data_loader, epoch=0,
     with torch.no_grad():
         for i, batch in enumerate(data_loader):
             # process batch items: images, labels
-            img = to_cuda(batch['rgb'], trainer.computing_device)
-            target = to_cuda(batch['label'], trainer.computing_device, label=True)
+            img = to_cuda(batch[sd.IMG], trainer.computing_device)
+            target = to_cuda(batch[sd.LBL], trainer.computing_device, label=True)
+            id = batch[sd.ID]
 
             # compute output
             end = time.time()
@@ -274,7 +283,7 @@ def evaluate(model, trainer, data_loader, epoch=0,
             meter['loss'].update(loss, batch_size)
 
             # update metrics2
-            metrics.update(logits, target)
+            metrics.update(logits, target, id)
 
             # measure elapsed time
             meter['batch_time'].update(time.time() - end, batch_size)
@@ -310,25 +319,45 @@ def evaluate(model, trainer, data_loader, epoch=0,
 
     return meter['loss'].avg, meter['acc'].avg, meter['batch_time'], metrics
 
-def deploy():
+def deploy(opt, logger=None):
     """
-    #TODO @Sneha
+
+    CURRENT: accepts data only from csv file generated through SPICI
+
+    Args:
+        opt:
+        logger:
 
     Returns:
 
     """
-    """
-    Pseudocode
-    # process given input
-    input = input...
-    
-    # compute output
-    output = model(input...)
-    
-    # visualize prediction
-    eval_utils.vis_prediction(...) #TODO write this function
-    """
-    pass
+    logger = logger if logger else logging.getLogger('deploy')
+    start_datetime = datetime.today().strftime('%Y-%m-%d_%H:%M:%S')
+
+    # read data
+    data_loader = get_dataloader(mode=DEPLOY, data_dir=opt.deploy_data,
+                                batch_size=opt.batch_size,
+                                input_size=opt.input_size)
+
+    # load model
+    model = resnet.create_model(arch='resnet50', num_classes=2)
+    Logger.section_break('Model')
+    logger.debug(model)
+    fn = 'model/' + opt.arch.split('_')[0] + '.pth'
+    print("Name of the pretrained model filename is {}".format(fn))
+    model.load_pretrained(fn)
+    logger.debug("Loaded imagenet pretrained checkpoint")
+
+    # Initialize Trainer for initializing losses, optimizers, loading weights, etc
+    trainer = Trainer(model=model, model_dir=opt.model_dir, mode=opt.mode,
+                      resume=opt.resume)
+
+    # return predictions back to image_ids
+    _, _, run_time, metrics = evaluate(
+        model=trainer.model, trainer=trainer, data_loader=data_loader,
+        logger=logger, tb_logger=tb_logger)
+
+    metrics.save_predictions(start_datetime)
 
 if __name__ == '__main__':
     #TODO write out help description
@@ -354,16 +383,19 @@ if __name__ == '__main__':
     parser.add_argument('--save_freq', type=int, default=opt.save_freq)
     parser.add_argument('--log2file', dest='log2file', action='store_true')
 
+    # Deploy hyperparameters
+    parser.add_argument('--deploy_data', type=str, default=opt.deploy_data)
+
+
 
     #TODO add more arguments here
 
-    # Parse all arguments
+    # # Parse all arguments
     args = parser.parse_args()
     arguments = args.__dict__
 
     # Example of passing in arguments as the new configurations
-    #TODO find more efficinet way to pass in arguments into configuraiton file
-    #TODO fix GPU initialization
+    #TODO find more efficient way to pass in arguments into configuration file
     mode = arguments.pop(MODE)
     arch = arguments.pop(ARCH)
     model_dir = arguments.pop(MODEL_DIR)
@@ -377,11 +409,12 @@ if __name__ == '__main__':
     print_freq = arguments.pop(PRINT_FREQ)
     save_freq = arguments.pop(SAVE_FREQ)
     log2file = arguments.pop(LOG2FILE)
+    deploy_data = arguments.pop(DEPLOY_DATA)
     opt = set_config(mode=mode, arch=arch, model_dir=model_dir, data_dir=data_dir,
                      lr=lr, epochs=epochs, batch_size=batch_size,
                      input_size=input_size, gpu=gpu, resume=resume,
                      print_freq=print_freq, save_freq=save_freq,
-                     log2file=log2file)
+                     log2file=log2file, deploy_data=deploy_data)
 
     # Initialize Logger
     Logger(log_filename=os.path.join(opt.model_dir, '{}.log'.format(opt.mode)),
@@ -397,4 +430,7 @@ if __name__ == '__main__':
         tb_logger = None
 
     # Train and evaluate
-    train_and_evaluate(opt, logger, tb_logger)
+    if opt.mode == TRAIN or opt.mode == VAL:
+        train_and_evaluate(opt, logger, tb_logger)
+    else:
+        deploy(opt, logger)

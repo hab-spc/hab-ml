@@ -26,6 +26,7 @@ class Config:
     argument `set_config()`. e.g. --voc-data-dir='./data/'
 
     """
+
     # Mode
     mode = TRAIN
 
@@ -34,12 +35,12 @@ class Config:
 
     # Network
     arch = 'resnet50'
-    model_dir = './experiments/default'
+    model_dir = './experiments/model_best.pth.tar'
     input_size = 112
 
     # Training hyperparameters
     lr = 0.001
-    epochs = 10
+    epochs = 15
     batch_size = 16
 
     # Optimizer
@@ -48,7 +49,7 @@ class Config:
     use_adagrad = False
 
     # Pytorch
-    gpu = '4'
+    gpu = '2'
     if torch.cuda.is_available():
         num_workers = 4
         pin_memory = True
@@ -65,12 +66,17 @@ class Config:
     estop_threshold = 3
     log2file = False
 
+    # Deploy Hyperparameters
+    deploy_data = None
 
     def _parse(self, kwargs):
         state_dict = self._state_dict()
         for k, v in kwargs.items():
             if k not in state_dict:
                 raise ValueError('UnKnown Option: "--%s"' % k)
+            if k == 'gpu':
+                if torch.cuda.is_available():
+                    os.environ["CUDA_VISIBLE_DEVICES"] = v
             setattr(self, k, v)
 
         # print('======user config========')
