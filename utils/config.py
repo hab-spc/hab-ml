@@ -53,7 +53,7 @@ class Config:
     if torch.cuda.is_available():
         num_workers = 4
         pin_memory = True
-        os.environ["CUDA_VISIBLE_DEVICES"] = gpu
+        # os.environ["CUDA_VISIBLE_DEVICES"] = gpu
     else:
         num_workers = 0
         pin_memory = False
@@ -77,7 +77,8 @@ class Config:
                 raise ValueError('UnKnown Option: "--%s"' % k)
             if k == 'gpu':
                 if torch.cuda.is_available():
-                    os.environ["CUDA_VISIBLE_DEVICES"] = v
+                    # os.environ["CUDA_VISIBLE_DEVICES"] = v
+                    print(v)
             setattr(self, k, v)
 
         # print('======user config========')

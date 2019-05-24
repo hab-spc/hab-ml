@@ -31,7 +31,7 @@ from spc.spctransformer import SPCDataTransformer
 from spc.spc_go import parse_cmds
 
 # Module level constants
-DEBUG = True
+DEBUG = False
 
 def prepare_db(data=None, image_dir=None, csv_file=None, save=False,
                args=None):
@@ -44,7 +44,7 @@ def prepare_db(data=None, image_dir=None, csv_file=None, save=False,
     #TODO create retraining-pipeline
     """
 
-    if not data.empty and isinstance(data, pd.DataFrame):
+    if not data and isinstance(data, pd.DataFrame):
         if os.path.exists(image_dir):
             tf_df = SPCDataTransformer(data=data).transform(image_dir)
 
@@ -71,7 +71,10 @@ def create_lab_csv(data_root):
     import glob
     import pandas as pd
     data_root += '_static_html'
-    images = glob.glob(os.path.join(data_root, 'images', '00000', '*-.jpeg'))
+    images_dir = glob.glob(os.path.join(data_root, 'images', '*'))
+    images = []
+    for d in images_dir:
+        images.extend(glob.glob(os.path.join(d, '*-.jpeg')))
     img_id = [os.path.basename(i).replace('.jpeg', '.tif') for i in images]
     df = pd.DataFrame({sd.IMG: images, sd.ID:img_id, sd.LBL: 0, sd.USR_LBL:0})
     csv_fname = os.path.join(data_root, 'meta.csv')
@@ -168,5 +171,5 @@ if __name__ == '__main__':
         prepare_db(args=args)
 
     else:
-        prepare_db(parse_cmds())
+        prepare_db(args=parse_cmds())
 
