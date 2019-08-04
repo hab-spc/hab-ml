@@ -6,26 +6,21 @@
 # Standard dist imports
 
 # Third party imports
-import logging
 import os
-import json
-import random
+
 import numpy as np
 import pandas as pd
-from PIL import Image
-from collections import OrderedDict
-
 import torch
 import torch.utils.data as data
-from torch.utils.data import Dataset
 import torchvision.transforms as transforms
+from PIL import Image
 from torch.autograd import Variable
+from torch.utils.data import Dataset
 
+from data.prepare_db import create_proro_csv, prepare_db, create_lab_csv
 # Project level imports
 from utils.config import opt
 from utils.constants import *
-from data.prepare_db import create_proro_csv, prepare_db, create_lab_csv
-from data.d_utils import clean_up
 
 # Module level constants
 #TODO make this dictionary dynamic according to the data loaded
@@ -233,11 +228,16 @@ class SPCHABDataset(Dataset):
 
     def _get_image_dir(self, data_root):
         """Get image dir"""
+        #TODO fix this function for grabbing the image directory
         master_db_dir = '/data6/lekevin/hab-master/hab-spc/phytoplankton-db'
+        master_db_dir = '/data6/phytoplankton-db/hab_in_situ/hab_field'
         img_dir = os.path.basename(data_root).split('.')[0]
         img_dir = os.path.join(master_db_dir, img_dir)
         if os.path.isdir(img_dir):
             return img_dir
+        else:
+            raise OSError(f'{img_dir} does not exist')
+
 
 
 def get_dataloader(data_dir, batch_size=1, input_size=112, shuffle=True,
@@ -273,8 +273,6 @@ def get_dataloader(data_dir, batch_size=1, input_size=112, shuffle=True,
     return data_loader
 
 if __name__ == '__main__':
-    import time
-    import sys
     DEBUG_DATALODER = False
     DEBUG_SPCHAB = False
     SPICI = False

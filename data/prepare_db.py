@@ -8,12 +8,13 @@ dataframe format for 'SPCHabDataset' initialization.
 
 
 """
-# Standard dist imports
-from datetime import datetime
 import glob
 import logging
 import os
 import sys
+# Standard dist imports
+from datetime import datetime
+
 sys.path.extend(['/data6/lekevin/hab-master',
                  '/data6/lekevin/hab-master/hab-spc'])
 
@@ -71,7 +72,7 @@ def create_lab_csv(data_root):
     import glob
     import pandas as pd
     data_root += '_static_html'
-    images_dir = glob.glob(os.path.join(data_root, 'images', '*'))
+    images_dir = glob.glob(os.path.join(data_root, 'static/images', '*'))
     images = []
     for d in images_dir:
         images.extend(glob.glob(os.path.join(d, '*-.jpeg')))
