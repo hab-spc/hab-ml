@@ -133,7 +133,7 @@ def clean_up(data, check_exist=False):
     assert 'image_url' in data.columns.values
     import os
     df = data.copy()
-    image_dir = '/data6/lekevin/hab-spc/phytoplankton-db/field_2017' #HACKEY
+    image_dir = '/data6/lekevin/hab-master/hab-spc/phytoplankton-db/field_2017' #HACKEY
     df['images'] = df['image_url'].apply(
         lambda x: os.path.join(image_dir, os.path.basename(x) + '.jpg'))
     #TODO include flag to check if image file is readable

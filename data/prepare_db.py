@@ -44,8 +44,8 @@ def prepare_db(data=None, image_dir=None, csv_file=None, save=False,
     After getting some results, use that data to retrain the classifier again.
     #TODO create retraining-pipeline
     """
-
-    if not data and isinstance(data, pd.DataFrame):
+    
+    if (data is not None) and isinstance(data, pd.DataFrame):
         if os.path.exists(image_dir):
             tf_df = SPCDataTransformer(data=data).transform(image_dir)
 
@@ -150,6 +150,7 @@ def create_proro_csv(filter_word='proro', data_dir=None):
             logger.info('Saved as:\n\t{}'.format(test_fn))
 
 if __name__ == '__main__':
+    
     if DEBUG:
         from argparse import Namespace
 

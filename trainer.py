@@ -13,6 +13,8 @@ import torch.optim as optim
 from utils.config import opt
 from utils.constants import *
 from utils.eval_utils import get_meter
+from utils.model_sql import model_sql
+from model.resnet import freezing_layers
 
 # Module level constants
 
@@ -25,7 +27,7 @@ class Trainer(object):
 
     """
     def __init__(self, model, model_dir=opt.model_dir, mode=TRAIN,
-                 resume=opt.resume, lr=opt.lr):
+                 resume=opt.resume, lr=opt.lr, class_count = None):
         """ Initialize Trainer
 
         Args:
@@ -48,19 +50,41 @@ class Trainer(object):
         self.best_err = np.inf
 
         self.optimizer = self._get_optimizer(lr=lr)
+        
         # Defaulted to CrossEntropyLoss
-        self.criterion = nn.CrossEntropyLoss()
+        if opt.mode == TRAIN:
+            self.logger.info(class_count)
+            weighted_y_n = input('Do you want to use weighted loss? (y/n)\n')
+            if weighted_y_n == 'y':
+                weight = np.array([x for _,x in sorted(zip(class_count.keys().tolist(),class_count.tolist()))])
+                self.logger.info('Class_count is: '+ str(weight))
+                weight = weight/sum(weight)
+                self.logger.info('Classes Weights are: '+ str(weight))
+                weight = np.flip(weight).tolist()
+                self.logger.info('Weighted Loss will be: ' + str(weight))
+                weight = torch.FloatTensor(weight).cuda()
+                self.criterion = nn.CrossEntropyLoss(weight=weight)
+            else:
+                self.criterion = nn.CrossEntropyLoss()
+        else:
+            self.criterion = nn.CrossEntropyLoss()
 
         # meter
         self.meter = {TRAIN: get_meter(), VAL: get_meter()}
 
-        # Load checkpoint
-        if resume or mode != TRAIN:
-            if resume:
-                fn = resume
-            else:
-                fn = os.path.join(self.model_dir, 'model_best.pth.tar')
+        if resume or mode == VAL:
+            sql = model_sql()
+            fn = os.path.join(sql.find_model_dir_path(), 'model_best.pth.tar')
+            sql.close()
             self.load_checkpoint(fn)
+
+        if mode == TRAIN:
+            freezing_layers(model)
+        
+        if mode == DEPLOY:
+            fn = os.path.join(opt.model_dir, 'model_best.pth.tar')
+            self.load_checkpoint(fn)
+
 
     def generate_state_dict(self, epoch, best_err):
         """Generate state dictionary for saving weights"""

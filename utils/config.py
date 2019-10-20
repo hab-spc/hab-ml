@@ -31,12 +31,12 @@ class Config:
     mode = TRAIN
 
     # Data
-    data_dir = "/data6/lekevin/hab-spc/phytoplankton-db/csv/proro"
+    data_dir = "/data6/lekevin/hab-master/hab-spc/phytoplankton-db/csv/proro"
 
     # Network
     arch = 'resnet50'
-    model_dir = './experiments/model_best.pth.tar'
-    input_size = 112
+    model_dir = './experiments/'
+    input_size = 224
 
     # Training hyperparameters
     lr = 0.001
@@ -51,7 +51,7 @@ class Config:
     # Pytorch
     gpu = '2'
     if torch.cuda.is_available():
-        num_workers = 4
+        num_workers = 8
         pin_memory = True
         # os.environ["CUDA_VISIBLE_DEVICES"] = gpu
     else:
@@ -59,13 +59,24 @@ class Config:
         pin_memory = False
 
     # Training flags
-    resume = None
+    resume = False
     print_freq = 50
-    save_freq = 2
+    save_freq = 20
     early_stop = True
     estop_threshold = 3
     log2file = False
 
+    #model sql
+    model_date = 0
+    sql_yn = 'n'
+    sql_weight_path = ''
+    train_acc = 0
+    test_acc = 0
+    class_num = 2
+    add_comm = ''
+    sql_log_path = ''
+    f_l = 0
+    
     # Deploy Hyperparameters
     lab_config = False
     deploy_data = None

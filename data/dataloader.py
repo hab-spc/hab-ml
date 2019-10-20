@@ -4,27 +4,31 @@
 
 """
 # Standard dist imports
+from collections import OrderedDict
+import os
+import sys
+import logging
 
 # Third party imports
-import os
-
 import numpy as np
 import pandas as pd
+import PIL
+from PIL import Image
 import torch
 import torch.utils.data as data
 import torchvision.transforms as transforms
-from PIL import Image
 from torch.autograd import Variable
 from torch.utils.data import Dataset
 
-from data.prepare_db import create_proro_csv, prepare_db, create_lab_csv
 # Project level imports
+from data.prepare_db import create_proro_csv, prepare_db, create_lab_csv
 from utils.config import opt
 from utils.constants import *
 
 # Module level constants
 #TODO make this dictionary dynamic according to the data loaded
-CLASSES = {0: 'Non-Prorocentrum', 1: 'Prorocentrum'}
+
+CLASSES = {}
 UNKNOWN = {999: 'Unknown'}
 NUM_CLASSES = len(CLASSES.keys())
 DEVELOP = False
@@ -87,7 +91,57 @@ def to_cuda(item, computing_device, label=False):
     else:
         item = Variable(item.to(computing_device)).float()
     return item
+    
 
+def create_class_dict (lbs_all_classes):
+    """
+    input: all classes labels which are unsorted
+    Helper Function: Sort class labels and assign them to global CLASSES vairable
+    """
+    global CLASSES
+    lbs_all_classes.sort()
+    CLASSES = {}
+    c = 0
+    for i in lbs_all_classes:
+        CLASSES[c] = i
+        c+=1
+    NUM_CLASSES = len(CLASSES.keys())
+    opt.class_num = len(lbs_all_classes)
+    
+    
+def grab_classes (mode, df_unique = None, filename = None):
+    """
+    Fill in CLASSES glob variable depends on different modes
+    if in train mode, create CLASSES out of train.csv.
+    if in val/deploy mode, retrieve CLASSES from the given filename
+    """
+    if mode == TRAIN:
+        lbs_all_classes = df_unique
+    else:
+        lbs_all_classes = []
+        
+        #check if file is able to be opened
+        try:
+            f = open(filename,'r')
+        except Error as e:
+            logger.debug(e)
+            sys.exit()
+            
+        with open(filename,'r') as f:
+                label_counts = f.readlines()
+        label_counts = label_counts[:-1]
+        for i in label_counts:
+            class_counts = i.strip()
+            class_counts = class_counts.split()
+            class_name = ''
+            for j in class_counts:
+                if not j.isdigit():
+                    class_name += (' '+j)
+            class_name = class_name.strip()
+            lbs_all_classes.append(class_name)
+    create_class_dict (lbs_all_classes)
+        
+        
 class SPCHABDataset(Dataset):
     """Custom Dataset class for the SPC Hab Dataset
 
@@ -96,7 +150,7 @@ class SPCHABDataset(Dataset):
     CSV files are located in a subdir `.../csv/`
 
     """
-    def __init__(self, data_root, mode='train', input_size=112):
+    def __init__(self, data_root, mode='train', input_size=224):
         """Initializes SPCHabDataset
 
         Args:
@@ -117,7 +171,8 @@ class SPCHABDataset(Dataset):
         self.mode = mode
         self.input_size = input_size
         self.rescale_size = input_size
-
+        self.logger = logging.getLogger('dataloader_'+mode)
+        
         # PROROCENTRUM csv files
         #TODO refactor code to accept abs path to csv_file rather than
         # assembling with data_root
@@ -128,26 +183,53 @@ class SPCHABDataset(Dataset):
                 csv_file = data_root # Absolute path to the deploy_data
             deploy_prep = True
         else:
-            csv_file = os.path.join(data_root,'proro_{}.csv').format(mode)
+            csv_file = os.path.join(data_root,'{}.csv').format(mode)
         self.data = pd.read_csv(csv_file)
+
+        
+        #get classes
+        filename = os.path.join(opt.model_dir, 'train_data.info')
+        if self.mode != DEPLOY:
+            df_unique = self.data[SPCData.LBL].unique()
+        else:
+            df_unique = None
+        grab_classes (self.mode, df_unique = df_unique, filename = filename)
+        self.logger.info('All classes detected are: '+str(CLASSES))
+        self.logger.info('opt.class_num = '+str(opt.class_num))
+        
+        #Store data_info
+        if opt.mode != DEPLOY:
+            data_save_path = os.path.join(opt.model_dir, mode+'_data.info')
+            with open(data_save_path, 'w') as f:
+                f.write(str(self.data[SPCData.LBL].value_counts()))
 
         if DEVELOP:
             self.data = self.data.sample(n=100).reset_index(drop=True)
 
-        if self.check_SPCformat():
-            image_dir = self._get_image_dir(data_root)
-            self.data = prepare_db(data=self.data, image_dir=image_dir,
-                                   csv_file=csv_file)
+        if self.mode == DEPLOY and opt.lab_config == True:
+            if self.check_SPCformat():
+                image_dir = self._get_image_dir(data_root)
+                self.data = prepare_db(data=self.data, image_dir=image_dir,
+                                       csv_file=csv_file)
 
         # Clarify what transformations are needed here
         self.data_transform = {
             TRAIN: transforms.Compose([transforms.Resize(self.rescale_size),
-                                       transforms.RandomCrop(input_size),
-                                       transforms.ColorJitter()]),
+                                       transforms.CenterCrop(input_size),
+                                      transforms.RandomAffine(360, translate=(0.1, 0.1), scale=None, shear=None, resample=False, fillcolor=0),
+                                       transforms.ToTensor(),
+                                       transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+                                      ]),
             VAL:  transforms.Compose([transforms.Resize(self.rescale_size),
-                                       transforms.CenterCrop(input_size)]),
+                                       transforms.CenterCrop(input_size),
+                                         transforms.ToTensor(),
+                                        transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+                                     ]),
             DEPLOY: transforms.Compose([transforms.Resize(self.rescale_size),
-                                       transforms.CenterCrop(input_size)])
+                                       transforms.CenterCrop(input_size),
+                                       transforms.ToTensor(),
+                                        transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+                                        ])
         }
         
         self.classes = sorted(CLASSES.values())
@@ -155,7 +237,6 @@ class SPCHABDataset(Dataset):
         if mode in [TRAIN, VAL]:
             self.class_to_index = {}
             for cls in self.classes:
-                # self.class_to_index[cls] = self.data.loc[self.data['label'] == cls, "images"]
                 self.class_to_index[cls] = self.data.index[self.data[SPCData.LBL] ==
                                                            cls].tolist()
 
@@ -172,20 +253,37 @@ class SPCHABDataset(Dataset):
 
         """
         # Load image
-        img_link = self.data.iloc[index][SPCData.IMG]
-        img = pil_loader(img_link)
+        img = pil_loader(self.data.iloc[index][SPCData.IMG])
+        ### Padding to Square
+        img_size = img.size
+        img_padding = [0,0]
+        if img_size[0] > img_size[1]:
+            img_padding[1] = int((img_size[0]-img_size[1])/2)
+        else:
+            img_padding[0] = int((img_size[1]-img_size[0])/2)
+        img_padding = tuple(img_padding)
+        img = transforms.Pad(img_padding,fill=0, padding_mode='constant')(img)
+        ###
         img = self.data_transform[self.mode](img)
-        img = rgb_preproc(pil2numpy(img))
-        img = numpy2tensor(img)
 
-        target = self.data.iloc[index][SPCData.LBL]
+        if SPCData.LBL not in self.data.columns:
+            target = self.data.iloc[index]['user_labels']
+        else:
+            target = self.data.iloc[index][SPCData.LBL]
         if not isinstance(target, (int, np.int64)):
             target = self.encode_labels(target)
 
-        if SPCData.ID in self.data.columns.values:
-            id = self.data.iloc[index][SPCData.ID]
+        if opt.lab_config == True:
+            if SPCData.ID in self.data.columns.values:
+                id = self.data.iloc[index][SPCData.ID]
+            else:
+                id = 0
         else:
-            id = 0
+            if SPCData.IMG in self.data.columns.values:
+                id = self.data.iloc[index][SPCData.IMG]
+            else:
+                id = 0
+
 
         return {SPCData.IMG: img, SPCData.LBL: target, SPCData.ID:id}
     
@@ -206,6 +304,7 @@ class SPCHABDataset(Dataset):
             if each == label:
                 cls_idx_lbl = idx
                 return cls_idx_lbl
+        self.logger.debug('No such class named ' + label + ' exist! ')
 
 
     def check_SPCformat(self, prepare_db_flag=False):
@@ -239,8 +338,7 @@ class SPCHABDataset(Dataset):
             raise OSError(f'{img_dir} does not exist')
 
 
-
-def get_dataloader(data_dir, batch_size=1, input_size=112, shuffle=True,
+def get_dataloader(data_dir, batch_size=1, input_size=224, shuffle=True,
                    num_workers=4, mode=TRAIN):
     """ Get the dataloader
 
@@ -259,7 +357,7 @@ def get_dataloader(data_dir, batch_size=1, input_size=112, shuffle=True,
     # Create dataset if it hasn't been created
     if mode in [TRAIN, VAL]:
         if not os.path.exists(data_dir) or len(os.listdir(data_dir)) == 0:
-            print('Data dir not detected. Creating dataset @ {}'.format(data_dir))
+            logger.debug('Data dir not detected. Creating dataset @ {}'.format(data_dir))
             create_proro_csv(output_dir=data_dir, log2file=True)
     else:
         if not os.path.exists(data_dir):
@@ -267,6 +365,7 @@ def get_dataloader(data_dir, batch_size=1, input_size=112, shuffle=True,
 
     dataset = SPCHABDataset(data_dir, mode=mode,
                                 input_size=input_size)
+
     data_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
                                                shuffle=shuffle, num_workers=num_workers,
                                                pin_memory=True)

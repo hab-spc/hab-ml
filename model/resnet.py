@@ -5,6 +5,7 @@
 """
 
 import os
+import logging
 
 import torch
 import torch.nn as nn
@@ -12,6 +13,7 @@ import torch.nn.functional as F
 import model.layers as L
 import collections
 
+from utils.config import opt, set_config
 
 __all__ = [ 
     'resnet10',
@@ -159,7 +161,36 @@ def create_model(arch, num_classes=1000):
     assert arch in __all__
     # Evaluates string into function representation e.g. `resnet18_dropout()`
     resnet_fcn = eval(arch)
-    return resnet_fcn(num_classes)
+    model = resnet_fcn(num_classes)
+     
+    return model
+
+def freezing_layers(model):
+    """
+    Used to freeze layers of the given model
+    """
+    logger = logging.getLogger('Model_freeze')
+    idx = 0
+    for name, param in model.named_parameters():
+        if 'conv' in name:
+            idx += 1
+            logger.info(name + ' ('+str(idx)+')')
+    total_conv_layers = idx
+    logger.info('There are total '+str(idx)+' conv layers.')
+
+    opt.f_l = int(input('Enter number of layers to freeze? (ex. 0) \n'))
+    logger.info('Number of Freezed Layers '+str(opt.f_l))
+    idx = 0
+    last = False
+    for name, param in model.named_parameters():
+        if 'conv' in name:
+            idx += 1
+        if idx <= opt.f_l and last == False:
+            param.requires_grad = False
+            if idx == total_conv_layers:
+                last = True
+        else:
+            param.requires_grad = True
 
 
 if __name__ == '__main__':

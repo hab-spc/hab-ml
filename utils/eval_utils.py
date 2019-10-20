@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch.nn as nn
 
+from utils.config import opt, set_config
+
 import logging
 mpl_logger = logging.getLogger('matplotlib')
 mpl_logger.setLevel(logging.WARNING)
@@ -61,13 +63,13 @@ class EvalMetrics(object):
         if not os.path.exists(self.results_dir):
             os.makedirs(self.results_dir)
         self.probabilities = []
-        self.softmax = nn.Softmax()
+        self.softmax = nn.Softmax(dim=1)
 
     def update(self, predictions, targets, ids, axis=1):
         # TODO save image id along with predicitons to save back to image files
         probs = self.softmax(predictions).detach().data.cpu().numpy()
         self.probabilities.extend(probs)
-
+        
         predictions = predictions.detach().data.cpu().numpy()
         predictions = predictions.argmax(axis).astype(int)
         self.predictions.extend(predictions)
@@ -90,8 +92,12 @@ class EvalMetrics(object):
             confusion_matrix_rawcount[t, p] += 1
         confusion_matrix_rate = np.zeros((self.num_class, self.num_class))
         for i in range(self.num_class):
-            confusion_matrix_rate[i, :] = (confusion_matrix_rawcount[i, :]) / \
-                                          class_count[i, 0] * 100
+            if class_count[i, 0] == 0:
+                confusion_matrix_rate[i, :] = 0
+            else:
+                confusion_matrix_rate[i, :] = (confusion_matrix_rawcount[i, :]) / \
+                                                  class_count[i, 0] * 100
+            
         confusion_matrix_rate = np.around(confusion_matrix_rate, decimals=4)
         if plot:
             self._plot_confusion_matrix(confusion_matrix_rate)
@@ -99,15 +105,14 @@ class EvalMetrics(object):
 
 
     def _plot_confusion_matrix(self, cm, normalize=False,
-                               title='Confusion matrix',  cmap=plt.cm.Blues):
+                                cmap=plt.cm.Blues):
         if normalize:
             cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-            print("Normalized confusion matrix")
+            title = "Normalized confusion matrix"
         else:
-            print('Confusion matrix, without normalization')
+            title = 'Confusion matrix, without normalization'
 
-        print(cm)
-
+        plt.figure(figsize=(30,30))
         plt.imshow(cm, interpolation='nearest', cmap=cmap)
         plt.title(title)
         plt.colorbar()
@@ -122,11 +127,25 @@ class EvalMetrics(object):
                      horizontalalignment="center",
                      color="white" if cm[i, j] > thresh else "black")
 
-        plt.tight_layout()
+
         plt.ylabel('True label')
         plt.xlabel('Predicted label')
-        plt.savefig(self.results_dir + '/cm.png')
+        
+        plt.savefig(opt.model_dir+'figs/'+str(opt.mode)+'_confusion.png')
         plt.show()
+        
+        #Store diagonal of the confusion matrix
+        cm_diag = []
+        for i in range(cm.shape[0]):
+            cm_diag.append(cm[i,i])
+        class_diag = self.classes.copy()
+        class_diag = [x for _,x in sorted(zip(cm_diag,class_diag))]
+        cm_diag.sort()
+        with open(opt.model_dir+'figs/'+'confusion_diag.txt', 'w') as the_file:
+            for i in range(len(cm_diag)):
+                line = '{:>39}  {:>12}'.format(class_diag[i], str(cm_diag[i]))
+                the_file.write(line+'\n')
+        
 
     def save_predictions(self, start_datetime=None, run_time=0,
                          model_version=None, dest_dir=None):
@@ -154,7 +173,11 @@ class EvalMetrics(object):
             json_dict['machine_labels'].append(params)
 
         # Save as json file
-        json_fname = os.path.join(dest_dir, 'predictions.json')
+        unique_id = datetime.now().strftime('%Y%m%d%H%M%S')
+        if opt.lab_config == False:
+            json_fname = os.path.join(dest_dir, 'predictions_'+unique_id+'.json')
+        else:
+            json_fname = os.path.join(dest_dir, 'predictions.json')
         with open(json_fname, 'w', encoding='utf-8') as json_file:
             json.dump(json_dict, json_file, indent=4, separators=(',', ':'),
                       sort_keys=True, cls=NumpyEncoder)
@@ -178,6 +201,7 @@ def vis_training(train_points, val_points, num_epochs=0, loss=True, **kwargs):
     num_epochs = len(train_points)
     x = np.arange(0, num_epochs)
 
+    plt.figure()
     plt.plot(x, train_points, 'b')
     plt.plot(x, val_points, 'r')
 
@@ -194,10 +218,12 @@ def vis_training(train_points, val_points, num_epochs=0, loss=True, **kwargs):
     plt.gca().legend(('Train', 'Val'))
     plt.xlabel('Number of Epochs')
 
-    if not os.path.exists('figs'):
-        os.makedirs('figs')
-
-    save_path = './figs/train_val_{}'.format('loss' if loss else 'accuracy')
+    figs_folder_path = os.path.join(opt.model_dir, 'figs')
+    if not os.path.exists(figs_folder_path):
+        os.makedirs(figs_folder_path)
+    
+    save_path = os.path.join(opt.model_dir,'figs/train_val_{}'.format('loss' if loss else 'accuracy'))
+    #save_path = './figs/train_val_{}'.format('loss' if loss else 'accuracy')
     for k_, v_ in kwargs.items():
         save_path += '_%s' % v_
     save_path += '.png'

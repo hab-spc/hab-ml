@@ -18,9 +18,8 @@ import argparse
 import logging
 import os
 import sys
-#TODO change this to be dynamic
-sys.path.insert(0, '/data6/lekevin/hab-master/hab-spc/')
-#TODO figure out why module imports aren't working
+sys.path.insert(0,os.path.realpath(__file__)[:-7])
+
 from pprint import pformat
 import time
 from datetime import datetime
@@ -29,6 +28,7 @@ from datetime import datetime
 from tensorboardX import SummaryWriter
 import numpy as np
 import torch
+import matplotlib.pyplot as plt
 
 # Project level imports
 from model import resnet
@@ -37,8 +37,9 @@ from data.dataloader import get_dataloader, to_cuda
 from utils.constants import *
 from utils.constants import SPCData as sd
 from utils.config import opt, set_config
-from utils.eval_utils import accuracy, get_meter, EvalMetrics
+from utils.eval_utils import accuracy, get_meter, EvalMetrics, vis_training
 from utils.logger import Logger
+from utils.model_sql import model_sql
 
 # Module level constants
 
@@ -70,9 +71,8 @@ def train_and_evaluate(opt, logger=None, tb_logger=None):
     data_loader = {mode: get_dataloader(opt.data_dir,
                                         batch_size=opt.batch_size,
                                         mode=mode) for mode in [TRAIN, VAL]}
-
-    # Initialize model
-    model = resnet.create_model(arch='resnet50', num_classes=2)
+    
+    model = resnet.create_model(arch='resnet50', num_classes=opt.class_num)
     Logger.section_break('Model')
     logger.debug(model)
     fn = 'model/' + opt.arch.split('_')[0] + '.pth'
@@ -82,28 +82,39 @@ def train_and_evaluate(opt, logger=None, tb_logger=None):
 
     # Initialize Trainer for initializing losses, optimizers, loading weights, etc
     trainer = Trainer(model=model, model_dir=opt.model_dir, mode=opt.mode,
-                      resume=opt.resume, lr=opt.lr)
+                      resume=opt.resume, lr=opt.lr, class_count = data_loader[TRAIN].dataset.data[SPCData.LBL].value_counts())
+    
 
     if opt.mode == TRAIN:
         best_err = trainer.best_err
         Logger.section_break('Valid (Epoch {})'.format(trainer.start_epoch))
-        err, acc, _, _ = evaluate(trainer.model, trainer, data_loader[VAL],
-                       0, opt.batch_size, logger, tb_logger, max_iters=200)
+        err, acc, _, metrics_test = evaluate(trainer.model, trainer, data_loader[VAL],
+                       0, opt.batch_size, logger, tb_logger, max_iters=None)
+        metrics_best = metrics_test
 
+        eps_meter = get_meter(meters=['train_loss', 'val_loss', 'train_acc', 'val_acc'])
+        
         for ii, epoch in enumerate(range(trainer.start_epoch,
                                          trainer.start_epoch+opt.epochs)):
 
             # Train for one epoch
             Logger.section_break('Train (Epoch {})'.format(epoch))
-            train(trainer.model, trainer, data_loader[TRAIN], epoch, logger,
+            train_loss, train_acc = train(trainer.model, trainer, data_loader[TRAIN], epoch, logger,
                   tb_logger, opt.batch_size, opt.print_freq)
-
+            eps_meter['train_loss'].update(train_loss)
+            eps_meter['train_acc'].update(train_acc)
+            
             # Evaluate on validation set
             Logger.section_break('Valid (Epoch {})'.format(epoch))
-            err, acc, _, _ = evaluate(trainer.model, trainer, data_loader[VAL],
+            err, acc, _, metrics_test = evaluate(trainer.model, trainer, data_loader[VAL],
                                    0, opt.batch_size, logger, tb_logger,
-                                   max_iters=200)
-
+                                   max_iters=None)
+            eps_meter['val_loss'].update(err)
+            eps_meter['val_acc'].update(acc)
+            
+            plt.figure()
+            metrics_test.compute_cm(plot=True)
+                
             # Remember best error and save checkpoint
             is_best = err < best_err
             best_err = min(err, best_err)
@@ -113,14 +124,30 @@ def train_and_evaluate(opt, logger=None, tb_logger=None):
                 trainer.save_checkpoint(state, is_best=False,
                                         filename='checkpoint-{}_{:0.4f}.pth.tar'.format(
                                             epoch, acc))
-            else:
+            if is_best:
+                metrics_best = metrics_test
                 trainer.save_checkpoint(state, is_best=is_best,
                                         filename='model_best.pth.tar')
+                
+      
+        opt.train_acc = max(eps_meter['train_acc'].data)
+        opt.test_acc = max(eps_meter['val_acc'].data)
+        #plot loss over eps
+        vis_training(eps_meter['train_loss'].data, eps_meter['val_loss'].data, loss=True)
+        #plot acc over eps
+        vis_training(eps_meter['train_acc'].data, eps_meter['val_acc'].data, loss=False)
+        
+        #plot best confusion matrix
+        plt.figure()
+        metrics_best.compute_cm(plot=True)
+        
+            
+            
     elif opt.mode == VAL:
         err, acc, run_time, metrics = evaluate(
             model=trainer.model, trainer=trainer, data_loader=data_loader[
-                opt.mode], logger=logger, tb_logger=tb_logger)
-
+                VAL], logger=logger, tb_logger=tb_logger)
+        
         #TODO write as print_eval()
         Logger.section_break('EVAL COMPLETED')
         model_parameters = filter(lambda p: p.requires_grad,
@@ -138,7 +165,7 @@ def train_and_evaluate(opt, logger=None, tb_logger=None):
         logger.info(log)
         log = '[FIGS] {}'.format(metrics.results_dir)
         logger.info(log)
-
+        
         cm = metrics.compute_cm(plot=True)
 
 def train(model, trainer, train_loader, epoch, logger, tb_logger,
@@ -221,6 +248,8 @@ def train(model, trainer, train_loader, epoch, logger, tb_logger,
 
     tb_logger.add_scalar('train-epoch/loss', meter['loss'].avg, epoch)
     tb_logger.add_scalar('train-epoch/accuracy', meter['acc'].avg, epoch)
+    
+    return meter['loss'].avg, meter['acc'].avg
 
     
 
@@ -340,7 +369,7 @@ def deploy(opt, logger=None):
                                 input_size=opt.input_size)
 
     # load model
-    model = resnet.create_model(arch='resnet50', num_classes=2)
+    model = resnet.create_model(arch='resnet50', num_classes=opt.class_num)
     Logger.section_break('Model')
     logger.debug(model)
     fn = 'model/' + opt.arch.split('_')[0] + '.pth'
@@ -357,11 +386,16 @@ def deploy(opt, logger=None):
         model=trainer.model, trainer=trainer, data_loader=data_loader,
         logger=logger, tb_logger=tb_logger)
 
+    # plot confusion matrix
+    plt.figure()
+    metrics.compute_cm(plot=True)
+
     dest_dir = opt.deploy_data + '_static_html' if opt.lab_config else os.path.dirname(opt.deploy_data)
     metrics.save_predictions(start_datetime, run_time.avg, opt.model_dir,
                              dest_dir)
 
 if __name__ == '__main__':
+    
     #TODO write out help description
     """Argument Parsing"""
     parser = argparse.ArgumentParser()
@@ -389,8 +423,6 @@ if __name__ == '__main__':
     parser.add_argument('--deploy_data', type=str, default=opt.deploy_data)
     parser.add_argument('--lab_config', dest='lab_config', action='store_true')
 
-
-
     #TODO add more arguments here
 
     # # Parse all arguments
@@ -399,7 +431,7 @@ if __name__ == '__main__':
 
     # Example of passing in arguments as the new configurations
     #TODO find more efficient way to pass in arguments into configuration file
-    mode = arguments.pop(MODE)
+    mode = arguments.pop(MODE).lower()
     arch = arguments.pop(ARCH)
     model_dir = arguments.pop(MODEL_DIR)
     data_dir = arguments.pop(DATA_DIR)
@@ -414,13 +446,38 @@ if __name__ == '__main__':
     log2file = arguments.pop(LOG2FILE)
     deploy_data = arguments.pop(DEPLOY_DATA)
     lab_config = arguments.pop(LAB_CONFIG)
+    
     opt = set_config(mode=mode, arch=arch, model_dir=model_dir, data_dir=data_dir,
                      lr=lr, epochs=epochs, batch_size=batch_size,
                      input_size=input_size, gpu=gpu, resume=resume,
                      print_freq=print_freq, save_freq=save_freq,
                      log2file=log2file, deploy_data=deploy_data,
                      lab_config=lab_config)
+    ## Usr Input 
+    if opt.mode != DEPLOY:
+        date = input('Enter training set date (ex.20190708) : \n')
+        opt.data_dir = '/data6/plankton_test_db_new/data/' + date
+        print(opt.data_dir)
+    
+    if opt.mode != DEPLOY:
+        resume = input('Do you want to load existed checkpoint ? (y/n)\n')
+        if resume == 'y':
+            opt.resume = True
+        else:
+            opt.resume = False
 
+    if opt.mode != DEPLOY:
+        opt.sql_yn = input('Do you want to save model to sql database? (y/n)\n')
+        if opt.sql_yn == 'y':
+            date = input('Enter today date (ex.20190708) : \n')
+            opt.model_date = date
+            temp_path = '/data6/plankton_test_db_new/model/' + date
+            if not os.path.isdir(temp_path):
+                os.mkdir(temp_path)
+            opt.model_dir = '/data6/plankton_test_db_new/model/' + date + '/' + datetime.now().strftime("%H:%M:%S") + '/'
+            os.mkdir(opt.model_dir)
+            os.mkdir(opt.model_dir+'figs/')  
+    
     # Initialize Logger
     Logger(log_filename=os.path.join(opt.model_dir, '{}.log'.format(opt.mode)),
                     level=logging.DEBUG, log2file=opt.log2file)
@@ -439,3 +496,13 @@ if __name__ == '__main__':
         train_and_evaluate(opt, logger, tb_logger)
     else:
         deploy(opt, logger)
+     
+    Logger.section_break('User Config After')
+    logger.info(pformat(opt._state_dict()))
+    
+    if opt.sql_yn == 'y':
+        logger.info('Inserting current model to sql database')
+        sql = model_sql()
+        sql.save_model()
+        sql.close()
+        
