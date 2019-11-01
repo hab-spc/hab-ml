@@ -1,11 +1,12 @@
 from __future__ import absolute_import
-from pprint import pprint
+
 import os
+
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 
 import torch
 
-from utils.constants import *
+from utils.constants import Constants as CONST
 
 class Config:
     """Default Configs for training
@@ -28,7 +29,7 @@ class Config:
     """
 
     # Mode
-    mode = TRAIN
+    mode = CONST.TRAIN
 
     # Data
     data_dir = "/data6/lekevin/hab-master/hab-spc/phytoplankton-db/csv/proro"
@@ -88,7 +89,7 @@ class Config:
                 raise ValueError('UnKnown Option: "--%s"' % k)
             if k == 'gpu':
                 if torch.cuda.is_available():
-                    # os.environ["CUDA_VISIBLE_DEVICES"] = v
+                    os.environ["CUDA_VISIBLE_DEVICES"] = v
                     print(v)
             setattr(self, k, v)
 

@@ -1,19 +1,22 @@
 """ Create/Modify ResNet models
 
-#TODO model resnet description
+ResNet has multiple options for model selection, ranging from 10 to 50, including w/ or w/out dropout.
+An example to instantiate the model is given below
 
 """
-
-import os
+# Standard dist
+import collections
 import logging
+import os
 
+# Third party imports
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import model.layers as L
-import collections
 
-from utils.config import opt, set_config
+# Project level imports
+import model.layers as L
+from utils.config import opt
 
 __all__ = [ 
     'resnet10',
@@ -28,7 +31,9 @@ __all__ = [
 
 
 class ResNet(nn.Module):
+    """ResNet Pytorch module"""
     def __init__(self, block, nb_blocks, nb_channels, downsample, num_classes, dropout=False):
+        """Initializes ResNet"""
         super(ResNet, self).__init__()
         name = 'conv1'
         module = L.ConvBlock(3, 64, 7, stride=2, padding=3, 
@@ -84,7 +89,11 @@ class ResNet(nn.Module):
             None
 
         """
-        checkpoint = torch.load(pretrained_fn)
+        try:
+            checkpoint = torch.load(pretrained_fn)
+        except:
+            print(f'{pretrained_fn} not detected.Please run download_pretrained.py from ./hab-ml/model')
+            exit()
         state_dict = self.state_dict()
 #         print('\n' + '='*30+' State Dict Keys '+'='*30)
 #         print(state_dict.keys())
@@ -166,8 +175,14 @@ def create_model(arch, num_classes=1000):
     return model
 
 def freezing_layers(model):
-    """
-    Used to freeze layers of the given model
+    """ Used to freeze layers of the given model
+
+    Args:
+        model (ResNet): ResNet model
+
+    Returns:
+        None
+
     """
     logger = logging.getLogger('Model_freeze')
     idx = 0

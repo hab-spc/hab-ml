@@ -1,7 +1,12 @@
-import torch
+"""Layer modules to create model
+
+Layers are based off convolutional neural networks standards and ResNet configurations (i.e. blocks)
+Such modules are used to create_model like ResNet.
+
+"""
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
+
 
 def linear(in_channels, out_channels, use_bias=True):
     return nn.Linear(in_channels, out_channels, bias=use_bias)

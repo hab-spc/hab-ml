@@ -3,27 +3,26 @@
 #TODO DataLoader descriptio needed
 
 """
+import logging
 # Standard dist imports
-from collections import OrderedDict
 import os
 import sys
-import logging
 
 # Third party imports
 import numpy as np
 import pandas as pd
-import PIL
-from PIL import Image
 import torch
 import torch.utils.data as data
 import torchvision.transforms as transforms
+from PIL import Image
 from torch.autograd import Variable
 from torch.utils.data import Dataset
 
 # Project level imports
-from data.prepare_db import create_proro_csv, prepare_db, create_lab_csv
+from data.prepare_db import prepare_db, create_lab_csv
 from utils.config import opt
-from utils.constants import *
+from utils.constants import Constants as CONST
+from utils.constants import SPCConstants as SPC_CONST
 
 # Module level constants
 #TODO make this dictionary dynamic according to the data loaded
@@ -115,32 +114,38 @@ def grab_classes (mode, df_unique = None, filename = None):
     if in train mode, create CLASSES out of train.csv.
     if in val/deploy mode, retrieve CLASSES from the given filename
     """
-    if mode == TRAIN:
+    if mode == CONST.TRAIN:
         lbs_all_classes = df_unique
     else:
-        lbs_all_classes = []
-        
+
         #check if file is able to be opened
         try:
             f = open(filename,'r')
         except Error as e:
             logger.debug(e)
             sys.exit()
-            
-        with open(filename,'r') as f:
-                label_counts = f.readlines()
-        label_counts = label_counts[:-1]
-        for i in label_counts:
-            class_counts = i.strip()
-            class_counts = class_counts.split()
-            class_name = ''
-            for j in class_counts:
-                if not j.isdigit():
-                    class_name += (' '+j)
-            class_name = class_name.strip()
-            lbs_all_classes.append(class_name)
+
+        lbs_all_classes = parse_classes(filename)
+
     create_class_dict (lbs_all_classes)
-        
+
+
+def parse_classes(filename):
+    """Parse MODE_data.info file"""
+    lbs_all_classes = []
+    with open(filename, 'r') as f:
+        label_counts = f.readlines()
+    label_counts = label_counts[:-1]
+    for i in label_counts:
+        class_counts = i.strip()
+        class_counts = class_counts.split()
+        class_name = ''
+        for j in class_counts:
+            if not j.isdigit():
+                class_name += (' ' + j)
+        class_name = class_name.strip()
+        lbs_all_classes.append(class_name)
+    return lbs_all_classes
         
 class SPCHABDataset(Dataset):
     """Custom Dataset class for the SPC Hab Dataset
@@ -167,7 +172,7 @@ class SPCHABDataset(Dataset):
             class_to_index(dict): Dictionary of each class with its
                 associated images
         """
-        assert mode in (TRAIN, VAL, DEPLOY), 'mode: train, val, deploy'
+        assert mode in (CONST.TRAIN, CONST.VAL, CONST.DEPLOY), 'mode: train, val, deploy'
         self.mode = mode
         self.input_size = input_size
         self.rescale_size = input_size
@@ -176,7 +181,7 @@ class SPCHABDataset(Dataset):
         # PROROCENTRUM csv files
         #TODO refactor code to accept abs path to csv_file rather than
         # assembling with data_root
-        if self.mode == DEPLOY:
+        if self.mode == CONST.DEPLOY:
             if os.path.isdir(data_root):
                 csv_file = create_lab_csv(data_root)
             else:
@@ -189,8 +194,8 @@ class SPCHABDataset(Dataset):
         
         #get classes
         filename = os.path.join(opt.model_dir, 'train_data.info')
-        if self.mode != DEPLOY:
-            df_unique = self.data[SPCData.LBL].unique()
+        if self.mode != CONST.DEPLOY:
+            df_unique = self.data[SPC_CONST.LBL].unique()
         else:
             df_unique = None
         grab_classes (self.mode, df_unique = df_unique, filename = filename)
@@ -198,15 +203,15 @@ class SPCHABDataset(Dataset):
         self.logger.info('opt.class_num = '+str(opt.class_num))
         
         #Store data_info
-        if opt.mode != DEPLOY:
+        if opt.mode != CONST.DEPLOY:
             data_save_path = os.path.join(opt.model_dir, mode+'_data.info')
             with open(data_save_path, 'w') as f:
-                f.write(str(self.data[SPCData.LBL].value_counts()))
+                f.write(str(self.data[SPC_CONST.LBL].value_counts()))
 
         if DEVELOP:
             self.data = self.data.sample(n=100).reset_index(drop=True)
 
-        if self.mode == DEPLOY and opt.lab_config == True:
+        if self.mode == CONST.DEPLOY and opt.lab_config == True:
             if self.check_SPCformat():
                 image_dir = self._get_image_dir(data_root)
                 self.data = prepare_db(data=self.data, image_dir=image_dir,
@@ -214,30 +219,30 @@ class SPCHABDataset(Dataset):
 
         # Clarify what transformations are needed here
         self.data_transform = {
-            TRAIN: transforms.Compose([transforms.Resize(self.rescale_size),
-                                       transforms.CenterCrop(input_size),
-                                      transforms.RandomAffine(360, translate=(0.1, 0.1), scale=None, shear=None, resample=False, fillcolor=0),
-                                       transforms.ToTensor(),
-                                       transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
-                                      ]),
-            VAL:  transforms.Compose([transforms.Resize(self.rescale_size),
-                                       transforms.CenterCrop(input_size),
-                                         transforms.ToTensor(),
-                                        transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
-                                     ]),
-            DEPLOY: transforms.Compose([transforms.Resize(self.rescale_size),
-                                       transforms.CenterCrop(input_size),
-                                       transforms.ToTensor(),
-                                        transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
-                                        ])
+            CONST.TRAIN: transforms.Compose([transforms.Resize(self.rescale_size),
+                                             transforms.CenterCrop(input_size),
+                                             transforms.RandomAffine(360, translate=(0.1, 0.1), scale=None, shear=None, resample=False, fillcolor=0),
+                                             transforms.ToTensor(),
+                                             transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+                                             ]),
+            CONST.VAL: transforms.Compose([transforms.Resize(self.rescale_size),
+                                           transforms.CenterCrop(input_size),
+                                           transforms.ToTensor(),
+                                           transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+                                           ]),
+            CONST.DEPLOY: transforms.Compose([transforms.Resize(self.rescale_size),
+                                              transforms.CenterCrop(input_size),
+                                              transforms.ToTensor(),
+                                              transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+                                              ])
         }
         
         self.classes = sorted(CLASSES.values())
         self.num_class = len(self.classes)
-        if mode in [TRAIN, VAL]:
+        if mode in [CONST.TRAIN, CONST.VAL]:
             self.class_to_index = {}
             for cls in self.classes:
-                self.class_to_index[cls] = self.data.index[self.data[SPCData.LBL] ==
+                self.class_to_index[cls] = self.data.index[self.data[SPC_CONST.LBL] ==
                                                            cls].tolist()
 
     def __len__(self):
@@ -253,7 +258,7 @@ class SPCHABDataset(Dataset):
 
         """
         # Load image
-        img = pil_loader(self.data.iloc[index][SPCData.IMG])
+        img = pil_loader(self.data.iloc[index][SPC_CONST.IMG])
         ### Padding to Square
         img_size = img.size
         img_padding = [0,0]
@@ -266,26 +271,27 @@ class SPCHABDataset(Dataset):
         ###
         img = self.data_transform[self.mode](img)
 
-        if SPCData.LBL not in self.data.columns:
-            target = self.data.iloc[index]['user_labels']
+        if SPC_CONST.LBL not in self.data.columns:
+            target = eval(self.data.iloc[index]['user_labels'])
+            if target == []:
+                target = 0
         else:
-            target = self.data.iloc[index][SPCData.LBL]
+            target = self.data.iloc[index][SPC_CONST.LBL]
         if not isinstance(target, (int, np.int64)):
             target = self.encode_labels(target)
 
         if opt.lab_config == True:
-            if SPCData.ID in self.data.columns.values:
-                id = self.data.iloc[index][SPCData.ID]
+            if SPC_CONST.ID in self.data.columns.values:
+                id = self.data.iloc[index][SPC_CONST.ID]
             else:
                 id = 0
         else:
-            if SPCData.IMG in self.data.columns.values:
-                id = self.data.iloc[index][SPCData.IMG]
+            if SPC_CONST.IMG in self.data.columns.values:
+                id = self.data.iloc[index][SPC_CONST.IMG]
             else:
                 id = 0
 
-
-        return {SPCData.IMG: img, SPCData.LBL: target, SPCData.ID:id}
+        return {SPC_CONST.IMG: img, SPC_CONST.LBL: target, SPC_CONST.ID: id}
     
     def encode_labels(self, label):
         """ Encode labels given the enumerated class index
@@ -300,11 +306,11 @@ class SPCHABDataset(Dataset):
             int: Class index
 
         """
+        cls_idx_lbl = 0
         for idx, each in enumerate(self.classes):
             if each == label:
                 cls_idx_lbl = idx
-                return cls_idx_lbl
-        self.logger.debug('No such class named ' + label + ' exist! ')
+        return cls_idx_lbl
 
 
     def check_SPCformat(self, prepare_db_flag=False):
@@ -313,7 +319,7 @@ class SPCHABDataset(Dataset):
         #check if dir or file
         if directory
         """
-        class_constants = [value for name, value in vars(SPCData).items()
+        class_constants = [value for name, value in vars(SPC_CONST).items()
                            if not name.startswith('__')]
         for col_name in class_constants:
             if col_name not in self.data.columns.values:
@@ -339,7 +345,7 @@ class SPCHABDataset(Dataset):
 
 
 def get_dataloader(data_dir, batch_size=1, input_size=224, shuffle=True,
-                   num_workers=4, mode=TRAIN):
+                   num_workers=4, mode=CONST.TRAIN):
     """ Get the dataloader
 
     Args:
@@ -355,10 +361,9 @@ def get_dataloader(data_dir, batch_size=1, input_size=224, shuffle=True,
 
     """
     # Create dataset if it hasn't been created
-    if mode in [TRAIN, VAL]:
+    if mode in [CONST.TRAIN, CONST.VAL]:
         if not os.path.exists(data_dir) or len(os.listdir(data_dir)) == 0:
-            logger.debug('Data dir not detected. Creating dataset @ {}'.format(data_dir))
-            create_proro_csv(output_dir=data_dir, log2file=True)
+            logger.debug('Data dir not detected. Need to create dataset @ {}'.format(data_dir))
     else:
         if not os.path.exists(data_dir):
             raise ValueError('File does not exist')
@@ -382,7 +387,7 @@ if __name__ == '__main__':
             deploy_data = '/data6/lekevin/hab-master/hab-spc/data/experiments/test_deploy_classifier.csv'
         else:
             deploy_data = '/data6/phytoplankton-db/hab_invitro/images/20190515_static_html/images/00000'
-        data_loader = get_dataloader(mode=DEPLOY, data_dir=deploy_data,
+        data_loader = get_dataloader(mode=CONST.DEPLOY, data_dir=deploy_data,
                                      batch_size=opt.batch_size,
                                      input_size=opt.input_size)
         print(len(data_loader))

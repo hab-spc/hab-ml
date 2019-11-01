@@ -1,15 +1,15 @@
 import itertools
 import json
-import os
+import logging
 import math
+import os
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch.nn as nn
 
-from utils.config import opt, set_config
+from utils.config import opt
 
-import logging
 mpl_logger = logging.getLogger('matplotlib')
 mpl_logger.setLevel(logging.WARNING)
 
@@ -130,8 +130,8 @@ class EvalMetrics(object):
 
         plt.ylabel('True label')
         plt.xlabel('Predicted label')
-        
-        plt.savefig(opt.model_dir+'figs/'+str(opt.mode)+'_confusion.png')
+
+        plt.savefig(os.path.join(opt.model_dir, 'figs', str(opt.mode) + '_confusion.png'))
         plt.show()
         
         #Store diagonal of the confusion matrix

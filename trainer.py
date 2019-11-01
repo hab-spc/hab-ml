@@ -9,12 +9,13 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+from model.resnet import freezing_layers
 # Project level imports
 from utils.config import opt
-from utils.constants import *
+from utils.constants import Constants as CONST
 from utils.eval_utils import get_meter
 from utils.model_sql import model_sql
-from model.resnet import freezing_layers
+
 
 # Module level constants
 
@@ -26,7 +27,8 @@ class Trainer(object):
     flags, typecasting variables to cuda, and loading/saving checkpoints.
 
     """
-    def __init__(self, model, model_dir=opt.model_dir, mode=TRAIN,
+
+    def __init__(self, model, model_dir=opt.model_dir, mode=CONST.TRAIN,
                  resume=opt.resume, lr=opt.lr, class_count = None):
         """ Initialize Trainer
 
@@ -52,7 +54,7 @@ class Trainer(object):
         self.optimizer = self._get_optimizer(lr=lr)
         
         # Defaulted to CrossEntropyLoss
-        if opt.mode == TRAIN:
+        if opt.mode == CONST.TRAIN:
             self.logger.info(class_count)
             weighted_y_n = input('Do you want to use weighted loss? (y/n)\n')
             if weighted_y_n == 'y':
@@ -70,18 +72,18 @@ class Trainer(object):
             self.criterion = nn.CrossEntropyLoss()
 
         # meter
-        self.meter = {TRAIN: get_meter(), VAL: get_meter()}
+        self.meter = {CONST.TRAIN: get_meter(), CONST.VAL: get_meter()}
 
-        if resume or mode == VAL:
+        if resume or mode == CONST.VAL:
             sql = model_sql()
             fn = os.path.join(sql.find_model_dir_path(), 'model_best.pth.tar')
             sql.close()
             self.load_checkpoint(fn)
 
-        if mode == TRAIN:
+        if mode == CONST.TRAIN:
             freezing_layers(model)
-        
-        if mode == DEPLOY:
+
+        if mode == CONST.DEPLOY:
             fn = os.path.join(opt.model_dir, 'model_best.pth.tar')
             self.load_checkpoint(fn)
 

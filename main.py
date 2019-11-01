@@ -3,7 +3,7 @@
 Script operates by requesting arguments from the user and feeds it into
 `train_and_evaluate()`, which acts as the main() of the script.
 
-Execcution of the script is largely dependent upon the `--mode` of the model.
+Execution of the script is largely dependent upon the `--mode` of the model.
 `train` will train the model and validate on a subset while `val` will go
 through a full evaluation.
 
@@ -34,8 +34,8 @@ import matplotlib.pyplot as plt
 from model import resnet
 from trainer import Trainer
 from data.dataloader import get_dataloader, to_cuda
-from utils.constants import *
-from utils.constants import SPCData as sd
+from utils.constants import Constants as CONST
+from utils.constants import SPCConstants as SPC_CONST
 from utils.config import opt, set_config
 from utils.eval_utils import accuracy, get_meter, EvalMetrics, vis_training
 from utils.logger import Logger
@@ -70,7 +70,7 @@ def train_and_evaluate(opt, logger=None, tb_logger=None):
     # check the path for the data loader to make sure it is loading the right data set
     data_loader = {mode: get_dataloader(opt.data_dir,
                                         batch_size=opt.batch_size,
-                                        mode=mode) for mode in [TRAIN, VAL]}
+                                        mode=mode) for mode in [CONST.TRAIN, CONST.VAL]}
     
     model = resnet.create_model(arch='resnet50', num_classes=opt.class_num)
     Logger.section_break('Model')
@@ -82,14 +82,14 @@ def train_and_evaluate(opt, logger=None, tb_logger=None):
 
     # Initialize Trainer for initializing losses, optimizers, loading weights, etc
     trainer = Trainer(model=model, model_dir=opt.model_dir, mode=opt.mode,
-                      resume=opt.resume, lr=opt.lr, class_count = data_loader[TRAIN].dataset.data[SPCData.LBL].value_counts())
-    
+                      resume=opt.resume, lr=opt.lr,
+                      class_count=data_loader[CONST.TRAIN].dataset.data[SPC_CONST.LBL].value_counts())
 
-    if opt.mode == TRAIN:
+    if opt.mode == CONST.TRAIN:
         best_err = trainer.best_err
         Logger.section_break('Valid (Epoch {})'.format(trainer.start_epoch))
-        err, acc, _, metrics_test = evaluate(trainer.model, trainer, data_loader[VAL],
-                       0, opt.batch_size, logger, tb_logger, max_iters=None)
+        err, acc, _, metrics_test = evaluate(trainer.model, trainer, data_loader[CONST.VAL],
+                                             0, opt.batch_size, logger, tb_logger, max_iters=None)
         metrics_best = metrics_test
 
         eps_meter = get_meter(meters=['train_loss', 'val_loss', 'train_acc', 'val_acc'])
@@ -99,16 +99,16 @@ def train_and_evaluate(opt, logger=None, tb_logger=None):
 
             # Train for one epoch
             Logger.section_break('Train (Epoch {})'.format(epoch))
-            train_loss, train_acc = train(trainer.model, trainer, data_loader[TRAIN], epoch, logger,
-                  tb_logger, opt.batch_size, opt.print_freq)
+            train_loss, train_acc = train(trainer.model, trainer, data_loader[CONST.TRAIN], epoch, logger,
+                                          tb_logger, opt.batch_size, opt.print_freq)
             eps_meter['train_loss'].update(train_loss)
             eps_meter['train_acc'].update(train_acc)
             
             # Evaluate on validation set
             Logger.section_break('Valid (Epoch {})'.format(epoch))
-            err, acc, _, metrics_test = evaluate(trainer.model, trainer, data_loader[VAL],
-                                   0, opt.batch_size, logger, tb_logger,
-                                   max_iters=None)
+            err, acc, _, metrics_test = evaluate(trainer.model, trainer, data_loader[CONST.VAL],
+                                                 0, opt.batch_size, logger, tb_logger,
+                                                 max_iters=None)
             eps_meter['val_loss'].update(err)
             eps_meter['val_acc'].update(acc)
             
@@ -140,13 +140,13 @@ def train_and_evaluate(opt, logger=None, tb_logger=None):
         #plot best confusion matrix
         plt.figure()
         metrics_best.compute_cm(plot=True)
-        
-            
-            
-    elif opt.mode == VAL:
+
+
+
+    elif opt.mode == CONST.VAL:
         err, acc, run_time, metrics = evaluate(
             model=trainer.model, trainer=trainer, data_loader=data_loader[
-                VAL], logger=logger, tb_logger=tb_logger)
+                CONST.VAL], logger=logger, tb_logger=tb_logger)
         
         #TODO write as print_eval()
         Logger.section_break('EVAL COMPLETED')
@@ -204,9 +204,9 @@ def train(model, trainer, train_loader, epoch, logger, tb_logger,
     end = time.time()
     for i, batch in enumerate(train_loader):
         # process batch items: images, labels
-        img = to_cuda(batch[sd.IMG], trainer.computing_device)
-        target = to_cuda(batch[sd.LBL], trainer.computing_device, label=True)
-        id = batch[sd.ID]
+        img = to_cuda(batch[SPC_CONST.IMG], trainer.computing_device)
+        target = to_cuda(batch[SPC_CONST.LBL], trainer.computing_device, label=True)
+        id = batch[SPC_CONST.ID]
 
         # measure data loading time
         meter['data_time'].update(time.time() - end)
@@ -297,9 +297,9 @@ def evaluate(model, trainer, data_loader, epoch=0,
     with torch.no_grad():
         for i, batch in enumerate(data_loader):
             # process batch items: images, labels
-            img = to_cuda(batch[sd.IMG], trainer.computing_device)
-            target = to_cuda(batch[sd.LBL], trainer.computing_device, label=True)
-            id = batch[sd.ID]
+            img = to_cuda(batch[SPC_CONST.IMG], trainer.computing_device)
+            target = to_cuda(batch[SPC_CONST.LBL], trainer.computing_device, label=True)
+            id = batch[SPC_CONST.ID]
 
             # compute output
             end = time.time()
@@ -364,9 +364,9 @@ def deploy(opt, logger=None):
     start_datetime = datetime.today().strftime('%Y-%m-%d_%H:%M:%S')
 
     # read data
-    data_loader = get_dataloader(mode=DEPLOY, data_dir=opt.deploy_data,
-                                batch_size=opt.batch_size,
-                                input_size=opt.input_size)
+    data_loader = get_dataloader(mode=CONST.DEPLOY, data_dir=opt.deploy_data,
+                                 batch_size=opt.batch_size,
+                                 input_size=opt.input_size)
 
     # load model
     model = resnet.create_model(arch='resnet50', num_classes=opt.class_num)
@@ -431,21 +431,21 @@ if __name__ == '__main__':
 
     # Example of passing in arguments as the new configurations
     #TODO find more efficient way to pass in arguments into configuration file
-    mode = arguments.pop(MODE).lower()
-    arch = arguments.pop(ARCH)
-    model_dir = arguments.pop(MODEL_DIR)
-    data_dir = arguments.pop(DATA_DIR)
-    lr = arguments.pop(LR)
-    epochs = arguments.pop(EPOCHS)
-    batch_size = arguments.pop(BATCH)
-    input_size = arguments.pop(INPUT_SIZE)
-    gpu = arguments.pop(GPU)
-    resume = arguments.pop(RESUME)
-    print_freq = arguments.pop(PRINT_FREQ)
-    save_freq = arguments.pop(SAVE_FREQ)
-    log2file = arguments.pop(LOG2FILE)
-    deploy_data = arguments.pop(DEPLOY_DATA)
-    lab_config = arguments.pop(LAB_CONFIG)
+    mode = arguments.pop(CONST.MODE).lower()
+    arch = arguments.pop(CONST.ARCH)
+    model_dir = arguments.pop(CONST.MODEL_DIR)
+    data_dir = arguments.pop(CONST.DATA_DIR)
+    lr = arguments.pop(CONST.LR)
+    epochs = arguments.pop(CONST.EPOCHS)
+    batch_size = arguments.pop(CONST.BATCH)
+    input_size = arguments.pop(CONST.INPUT_SIZE)
+    gpu = arguments.pop(CONST.GPU)
+    resume = arguments.pop(CONST.RESUME)
+    print_freq = arguments.pop(CONST.PRINT_FREQ)
+    save_freq = arguments.pop(CONST.SAVE_FREQ)
+    log2file = arguments.pop(CONST.LOG2FILE)
+    deploy_data = arguments.pop(CONST.DEPLOY_DATA)
+    lab_config = arguments.pop(CONST.LAB_CONFIG)
     
     opt = set_config(mode=mode, arch=arch, model_dir=model_dir, data_dir=data_dir,
                      lr=lr, epochs=epochs, batch_size=batch_size,
@@ -454,19 +454,19 @@ if __name__ == '__main__':
                      log2file=log2file, deploy_data=deploy_data,
                      lab_config=lab_config)
     ## Usr Input 
-    if opt.mode != DEPLOY:
+    if opt.mode != CONST.DEPLOY:
         date = input('Enter training set date (ex.20190708) : \n')
         opt.data_dir = '/data6/plankton_test_db_new/data/' + date
         print(opt.data_dir)
-    
-    if opt.mode != DEPLOY:
+
+    if opt.mode != CONST.DEPLOY:
         resume = input('Do you want to load existed checkpoint ? (y/n)\n')
         if resume == 'y':
             opt.resume = True
         else:
             opt.resume = False
 
-    if opt.mode != DEPLOY:
+    if opt.mode != CONST.DEPLOY:
         opt.sql_yn = input('Do you want to save model to sql database? (y/n)\n')
         if opt.sql_yn == 'y':
             date = input('Enter today date (ex.20190708) : \n')
@@ -486,13 +486,13 @@ if __name__ == '__main__':
     logger.info(pformat(opt._state_dict()))
 
     # Initialize Tensorboard Logger
-    if opt.mode == TRAIN:
+    if opt.mode == CONST.TRAIN:
         tb_logger = SummaryWriter(opt.model_dir)
     else:
         tb_logger = None
 
     # Train and evaluate
-    if opt.mode == TRAIN or opt.mode == VAL:
+    if opt.mode == CONST.TRAIN or opt.mode == CONST.VAL:
         train_and_evaluate(opt, logger, tb_logger)
     else:
         deploy(opt, logger)
