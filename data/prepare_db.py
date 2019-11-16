@@ -47,7 +47,7 @@ def prepare_db(data=None, image_dir=None, csv_file=None, save=False,
     else:
         spc = SPCServer()
         spc.retrieve(textfile=args.search_param_file,
-                     output_dir=args.image_output_path,
+                     data_dir=args.image_output_path,
                      output_csv_filename=args.meta_output_path,
                      download=args.download)
 
