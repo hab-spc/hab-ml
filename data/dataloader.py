@@ -182,11 +182,10 @@ class SPCHABDataset(Dataset):
         #TODO refactor code to accept abs path to csv_file rather than
         # assembling with data_root
         if self.mode == CONST.DEPLOY:
-            if os.path.isdir(data_root):
+            if os.path.isdir(data_root) and opt.lab_config:
                 csv_file = create_lab_csv(data_root)
             else:
                 csv_file = data_root # Absolute path to the deploy_data
-            deploy_prep = True
         else:
             csv_file = os.path.join(data_root,'{}.csv').format(mode)
         self.data = pd.read_csv(csv_file)

@@ -1,13 +1,26 @@
 """ """
+import logging
 # Standard dist imports
 from collections import OrderedDict
-import logging
 
 # Third party imports
+import pandas as pd
+
 
 # Project level imports
 
 # Module level constants
+
+def read_csv_dataset(csv_file, verbose=False):
+    df = pd.read_csv(csv_file)
+    if verbose:
+        print('\n{0:*^80}'.format(' Reading in the dataset '))
+        print("\nit has {0} rows and {1} columns".format(*df.shape))
+        print('\n{0:*^80}\n'.format(' It has the following columns '))
+        print(df.info())
+        print('\n{0:*^80}\n'.format(' The first 5 rows look like this '))
+        print(df.head())
+    return df
 
 def read_image():
     pass

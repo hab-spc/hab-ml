@@ -390,7 +390,7 @@ def deploy(opt, logger=None):
     plt.figure()
     metrics.compute_cm(plot=True)
 
-    dest_dir = opt.deploy_data + '_static_html' if opt.lab_config else os.path.dirname(opt.deploy_data)
+    dest_dir = opt.deploy_data + '_static_html' if opt.lab_config else opt.deploy_data
     metrics.save_predictions(start_datetime, run_time.avg, opt.model_dir,
                              dest_dir)
 

@@ -1,104 +1,284 @@
 """Prepare training/prediction dbs for Model
 
-Main script downloads images given the time query and preprocesses it into a
-dataframe format for 'SPCHabDataset' initialization.
-
-#TODO give option to train_val_split, if database preparation is for training
-- i.e. take in option to train or predict on the data
-
+# download new hab_in_situ data
+# model report
 
 """
+import argparse
 import os
+import random
 import sys
+from pathlib import Path
 # Standard dist imports
-from datetime import datetime
-
-sys.path.extend(['/data6/lekevin/hab-master',
-                 '/data6/lekevin/hab-master/hab-rnd/hab-ml',])
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # Third party imports
+import numpy as np
 import pandas as pd
 
 # Project level imports
-#TODO log dataset statistics from this
+from data.d_utils import read_csv_dataset
+from utils.config import opt
 from utils.constants import SPCConstants as SPC_CONST
-from spc.spcserver import SPCServer
-from spc.spctransformer import SPCDataTransformer
-from spc.spc_go import parse_cmds
 
 # Module level constants
 DEBUG = False
+INSITU = 'hab_in_situ'
+OTHER_LBL = 'other'
 
-def prepare_db(data=None, image_dir=None, csv_file=None, save=False,
-               args=None):
-    """
-    #TODO use this as test data for now. CSV files will have gtruth
-    Right now gtruth includes items like "False Prorocentrum", which should 
-    be "Non-Prorocentrum", but leaving that up to you to modify.
-    
-    After getting some results, use that data to retrain the classifier again.
-    #TODO create retraining-pipeline
-    """
+class DatasetGenerator(object):
+    def __init__(self, csv_file, data_dir, labels, dates):
+        # Initialize main data directory to save data
+        self.data_dir = os.path.join(opt.data_dir.format(data_dir))
 
-    if (data is not None) and isinstance(data, pd.DataFrame):
-        if os.path.exists(image_dir):
-            tf_df = SPCDataTransformer(data=data).transform(image_dir)
+        # Read in the dataset from the csv file
+        try:
+            self.data = read_csv_dataset(csv_file)
+        except:
+            raise FileNotFoundError('File does not exist: {}'.format(csv_file))
+        
+        # preprocess insitu datasets for empty, double labels
+        # if not workshop, but insitu
+        print('Cleaning & filtering dataframe\n')
+        parts = os.path.basename(csv_file)
+        if INSITU in parts and (not parts.split('.')[0].endswith('workshop2019')):
+            self.data = self.clean_raw_data()
 
+        # Given a labels txt file of the selected labels
+        # filter the dataset
+        if labels:
+            self.data = self.filter_labels(labels)
+
+        # Given a dates txt file of the selected dates
+        # filter the dataset
+        if dates:
+            self.data = self.filter_dates(dates)
+
+    def clean_raw_data(self, annotated_label_col=SPC_CONST.USR_LBL, gtruth_label_col=SPC_CONST.LBL, drop=False):
+        """Clean raw data (i.e. parse labels"""
+        df = self.data.copy()
+
+        def map_labels(x):
+            label = eval(x)
+            empty_label = len(label) == 0
+            multiple_labels = len(label) >= 2
+
+            # If we run into an empty label,
+            # right now we want to assume that as the
+            # common class "Other" until we can get someone
+            # to identify the class
+            if empty_label:
+                assigned_label = OTHER_LBL
+
+            # If we run into multiple labels
+            # ideally we want to use the labels from the true expert if available
+            # otherwise, we just use the trained annotators. For now since we dont
+            # have those labels, we'll put a placeholder for randomly sampling it
+            elif multiple_labels:
+                if OTHER_LBL in label:
+                    label.pop(label.index(OTHER_LBL))
+                assigned_label = str(random.sample(label, k=1)[0])
+
+            # Default case is to return the single label assigned
+            else:
+                assigned_label = str(label[0])
+            return assigned_label
+
+        # Map labels given label parsing scheme
+        df[gtruth_label_col] = df[annotated_label_col].apply(map_labels)
+        if drop:
+            df = df.drop(annotated_label_col, axis=1)
+
+        return df
+        # map empty labels # map double labels
+
+    def filter_dates(self, dates_txt_file, date_col='image_date'):
+        """Dates ~ naming convention for training & test sets"""
+        dates = self._read_dates(dates_txt_file)
+
+        df = self.data.copy()
+        return df[df[date_col].isin(dates)].reset_index(drop=True)
+
+    def filter_labels(self, labels_txt_file, label_col=SPC_CONST.LBL):
+        """Select classes given a label text file"""
+        # Read labels
+        labels = self._read_labels(labels_txt_file)
+
+        df = self.data.copy()
+        df = df[df[label_col].isin(labels.values())].reset_index(drop=True)
+        return df
+
+    def train_val_split(self):
+        data_dir = self.data_dir
+        df = self.data.copy()
+        freq = df[SPC_CONST.LBL].value_counts()
+        print('\n{0:*^80}'.format(' Image/Class Statistics '))
+        print('Image/Class Frequency:\n{}\n{}\n'.format('-' * 30, freq))
+        print('Current list of classes ({}): \n{}\n'.format(len(freq), sorted(df[SPC_CONST.LBL].unique())))
+
+        stop = False
+        print('\n{0:*^80}'.format(' Begin Dataset Partioning '))
+        while stop == False:
+            # initialize data structure for specifying number of images
+            # per class within training set. Remaining images are automatically
+            # allocated for the validation set
+            train_dict = {}
+            classes = df[SPC_CONST.LBL].unique()
+
+            # begin partitioning here
+            opt_partition = input("Current partioning/sampling options\n{}\n"
+                                  "\tType 1 to partition each class by a train_val ratio [Default]. \n"
+                                  "\tType 2 to partition each class by a user_selected sampling.\n".format('-' * 40))
+
+            if opt_partition == '1':
+                nums = self.train_val_ratio(classes)
+
+            elif opt_partition == '2':
+                nums = self.user_selected_sampling(classes)
+            else:
+                print('Option not given!')
+                stop = False
+                continue
+
+            # FLAGS for establishing training dictionaries
+            train_val_ratio_flag = len(nums) == 1
+            user_input_sampling_flag = len(nums) == len(classes)
+
+            if train_val_ratio_flag:
+                train_dict = {i: int(nums[0]) for i in classes}
+
+            elif user_input_sampling_flag:
+                train_dict = {classes[i]: int(nums[i]) for i in range(len(classes))}
+
+            else:
+                print('Class number not match !')
+                stop = False
+                continue
+
+            # Request user input to verify dataset partitioning
+            # then break the loop if `y`
+            print('Numbers of images selected for each class for training: ')
+            print(train_dict)
+            y_n = input('Are you sure these are the number you want? (y/n): (ex. y) \n')
+            stop = True if y_n == 'y' else False
+
+        # Create train and val df. train_df: df of train.csv; df: df of val.csv
+        train_df = pd.DataFrame()
+        # shuffle dataset
+        df = df.iloc[np.random.permutation(len(df))]
+        for i in classes:
+            # given the number of images per class within training dictionary
+            # sample without replacement that given amount
+            temp = df.loc[df[SPC_CONST.LBL] == i][:train_dict[i]]
+            train_df = train_df.append(temp)
+            # drop the training samples from the original dataframe
+            # to use the remainning for validation
+            temp = temp.index
+            df = df.drop(temp)
+        val_df = df.reset_index(drop=True)
+
+        #=== Dataset stats logging & saving ===#
+        print('Train and Val Dataframe contructed')
+        print('Train Dataframe Class Counts table')
+        print(train_df['label'].value_counts())
+        print('VAL Dataframe Class Counts table')
+        print(val_df['label'].value_counts())
+
+        #Store csv and info.txt
+        if not os.path.isdir(data_dir):
+            os.mkdir(data_dir)
+        train_path = os.path.join(data_dir,'train.csv')
+        train_df.to_csv(train_path, index=False)
+        print('Train Dataframe is stored to '+train_path)
+
+        val_path = os.path.join(data_dir,'val.csv')
+        val_df.to_csv(val_path)
+        print('Validation Dataframe is stored to ' + val_path)
+
+        info_path = os.path.join(data_dir,'info.txt')
+        print('Info is stored to '+ info_path)
+        f = open(info_path, 'w')
+        sys.stdout = f
+        print('Train and Test Dataframe contructed')
+        print('Train Dataframe Class Counts table')
+        print(train_df['label'].value_counts())
+        print('VAL Dataframe Class Counts table')
+        print(val_df['label'].value_counts())
+        f.close()
+
+    def save(self):
+        """Save the dataset after preparation"""
+        df = self.data.copy()
+        csv_filename = os.path.join(self.data_dir, os.path.basename(self.data_dir) + '.csv')
+        print('Dataset saved as {}'.format(csv_filename))
+        df.to_csv(csv_filename, index=False)
+
+    def train_val_ratio(self, classes):
+        """Parition each class by a percentage"""
+        df = self.data.copy()
+        nums = []
+        percent = input(
+            """Select percentages of images for each class to be in train.csv? \n 
+            Ex. 0.8 ==> class1: 80% train| 20% val; class2: 80% train| 20% val, ... \n""")
+        percent = float(percent)
+        for i in classes:
+            # Retrieve image counts grouped by each class and
+            # compute the data by the percent
+            temp = df.loc[df[SPC_CONST.LBL] == i].shape[0]
+            num = int(temp * percent)
+            nums.append(num)
+        return nums
+
+    def user_selected_sampling(self, classes):
+        """Partition each class by sampling"""
+        print('Enter number of images per class for training.\n')
+        print(sorted(classes))
+        nums = input(
+            """Ex. `20,40,1,2,3,6` --> results in 'Prorocentrum micans': 20, 'Lingulodinium polyedra': 40, 
+            Akashiwo': 1, 'Gyrodinium': 2, 'Cochlodinium': 3, 'Chattonella': 6}\n""")
+        nums = nums.replace(" ", "")
+        nums = nums.split(',')
+        nums = [x for x in nums if x]
+        return nums
+
+    def _read_dates(self, dates_txt_file):
+        """Read dates text file"""
+        with open(dates_txt_file, 'r') as f:
+            dates = set([line.strip() for line in f])
+        f.close()
+        return dates
+
+    def _read_labels(self, labels_txt_file):
+        """Read labels text file"""
+        with open(labels_txt_file, 'r') as f:
+            labels = {int(k): v for line in f for (k, v) in (line.strip().split(None, 1),)}
+        f.close()
+        return labels
+
+
+def prepare_db(split, csv_file_path, data_dir, labels_txt=None, dates=None):
+    # Select subset of the dataset according to the dates and classes
+    # if given dates and classes txt files
+    gen = DatasetGenerator(csv_file_path, data_dir, labels_txt, dates)
+    # split the dataset if specified
+    if split:
+        gen.train_val_split()
+    # if script is only used for preparation,
+    # then save the dataset as default
     else:
-        spc = SPCServer()
-        spc.retrieve(textfile=args.search_param_file,
-                     data_dir=args.image_output_path,
-                     output_csv_filename=args.meta_output_path,
-                     download=args.download)
+        gen.save()
 
-        # Read in resulting csv file
-        csv_file = args.meta_output_path
-        df = pd.read_csv(csv_file)
-        tf_df = SPCDataTransformer(data=df).transform(args.image_output_path)
-
-    # Resave with added transformations
-    if save:
-        print('Dataset prepared. Saved as {}'.format(csv_file))
-        tf_df.to_csv(csv_file, index=False)
-
-    return tf_df
-
-def create_lab_csv(data_root):
-    import glob
-    import pandas as pd
-    data_root += '_static_html'
-    images_dir = glob.glob(os.path.join(data_root, 'static/images', '*'))
-    images = []
-    for d in images_dir:
-        images.extend(glob.glob(os.path.join(d, '*-.jpeg')))
-    img_id = [os.path.basename(i).replace('.jpeg', '.tif') for i in images]
-    df = pd.DataFrame({SPC_CONST.IMG: images, SPC_CONST.ID: img_id, SPC_CONST.LBL: 0, SPC_CONST.USR_LBL: 0})
-    csv_fname = os.path.join(data_root, 'meta.csv')
-    df.to_csv(csv_fname, index=False)
-    return csv_fname
 
 if __name__ == '__main__':
-    if DEBUG:
-        from argparse import Namespace
+    # Parse arguments
+    parser = argparse.ArgumentParser('Prepare dataset')
+    parser.add_argument('--train_val_split', '-tv', action='store_true', help='Flag for train_val_split')
+    parser.add_argument('--csv', default=None, type=str, help='Absolute csv filepath (raw)')
+    parser.add_argument('--labels', default=None, type=str, help='Absolute labels filepath')
+    parser.add_argument('--data_dir', default=None, type=str, required=True, help='Relative data directory to DB')
+    parser.add_argument('--dates', default=None, type=str, help='Absolute dates filepath')
+    args = parser.parse_args()
 
-        working_dir = '/data6/lekevin/hab-master/hab-spc/data'
-        textfile = os.path.join(working_dir, 'experiments/time_period.txt')
-        output_dir = os.path.join(working_dir, 'experiments/images')
-
-        hour = False
-        save_fmt = '%Y-%m-%d_%H:%M:%S' if hour else '%Y-%m-%d'
-        mode_fmt = 'test'
-
-        output_csv_file = os.path.join(
-            working_dir, 'experiments/proro_{}_{}.csv'.format(
-                mode_fmt, datetime.today().strftime(save_fmt)))
-
-        args = Namespace(search_param_file=textfile,
-                         image_output_path=output_dir,
-                         meta_output_path=output_csv_file,
-                         download=False)
-        prepare_db(args=args)
-
-    else:
-        prepare_db(args=parse_cmds())
-
+    # Prepare the dataset for training and validation
+    prepare_db(split=args.train_val_split, csv_file_path=args.csv,
+               data_dir=args.data_dir, labels_txt=args.labels, dates=args.dates)

@@ -32,7 +32,7 @@ class Config:
     mode = CONST.TRAIN
 
     # Data
-    data_dir = "/data6/lekevin/hab-master/hab-spc/phytoplankton-db/csv/proro"
+    data_dir = "./DB/{}"
 
     # Network
     arch = 'resnet50'

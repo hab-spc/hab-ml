@@ -6,6 +6,7 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import torch.nn as nn
 
 from utils.config import opt
@@ -172,8 +173,25 @@ class EvalMetrics(object):
             params = dict(zip(key_fmt, dd))
             json_dict['machine_labels'].append(params)
 
+        # Save as csv file
+        #TODO figure out better way to append predictions to csv file
+        if not opt.lab_config:
+            csv_fname = opt.deploy_data.strip('.csv') + '-predictions.csv'
+            df = pd.read_csv(opt.deploy_data)
+            pred_df = pd.DataFrame(json_dict['machine_labels'])
+            pred_df = pred_df.rename({'gtruth': 'label'}, axis=1)
+
+            def extract_img_id(x):
+                return os.path.basename(x).split('.')[0] + '.tif'
+
+            pred_df['image_id'] = pred_df['image_id'].apply(extract_img_id)
+            merged = df.merge(pred_df, on='image_id')
+            merged.to_csv(csv_fname, index=False)
+            print('Predictions saved to {}'.format(csv_fname))
+
         # Save as json file
         unique_id = datetime.now().strftime('%Y%m%d%H%M%S')
+        dest_dir = os.path.dirname(dest_dir)
         if opt.lab_config == False:
             json_fname = os.path.join(dest_dir, 'predictions_'+unique_id+'.json')
         else:
@@ -182,6 +200,7 @@ class EvalMetrics(object):
             json.dump(json_dict, json_file, indent=4, separators=(',', ':'),
                       sort_keys=True, cls=NumpyEncoder)
         json_file.close()
+
         print('Predictions saved to {}'.format(json_fname))
 
 
