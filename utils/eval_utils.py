@@ -131,7 +131,6 @@ class EvalMetrics(object):
 
         plt.ylabel('True label')
         plt.xlabel('Predicted label')
-
         plt.savefig(os.path.join(opt.model_dir, 'figs', str(opt.mode) + '_confusion.png'))
         plt.show()
         
