@@ -27,7 +27,7 @@ class Constants():
     VAL = 'val';
     DEPLOY = 'deploy'
     IMG = 'images';
-    LBL = 'labels'
+    LBL = 'label'
     TRANSFORM = 'transform'
     INPUT_SIZE = 'input_size'
     COLOR = 'color'
