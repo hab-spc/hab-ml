@@ -40,6 +40,7 @@ from utils.config import opt, set_config
 from utils.eval_utils import accuracy, get_meter, EvalMetrics, vis_training
 from utils.logger import Logger
 from utils.model_sql import model_sql
+from sql_database.updateScript import updatePreds
 
 # Module level constants
 
@@ -306,6 +307,21 @@ def evaluate(model, trainer, data_loader, epoch=0,
             logits = model(img)
             loss = criterion(logits, target)
             acc = accuracy(logits, target)
+            batch_size = list(batch[SPC_CONST.LBL].shape)[0]
+
+            # Update DB
+            if opt.lab_config == True:
+                update_list = []
+                image_fn = id
+                confidence = np.float64(np.max(logits.cpu().data.numpy(),axis=1))
+                model_name = opt.model_dir
+                pred = np.argmax(logits.cpu().data.numpy(),axis=1)
+                for i in range(batch_size):
+                    if batch_size != 1:
+                        update_list.append((opt.classes[pred[i]], confidence[i], model_name, image_fn[i]))
+                    else:
+                        update_list.append((opt.classes[pred[i]], confidence, model_name, image_fn[i]))
+                updatePreds(update_list)
 
             # update metrics
             meter['acc'].update(acc, batch_size)
@@ -373,7 +389,8 @@ def deploy(opt, logger=None):
     Logger.section_break('Model')
     logger.debug(model)
     fn = 'model/' + opt.arch.split('_')[0] + '.pth'
-    print("Name of the pretrained model filename is {}".format(fn))
+    fn = os.path.join(os.path.realpath(__file__)[:-7],fn)
+    logger.debug("Name of the pretrained model filename is {}".format(fn))
     model.load_pretrained(fn)
     logger.debug("Loaded imagenet pretrained checkpoint")
 
@@ -390,7 +407,17 @@ def deploy(opt, logger=None):
     plt.figure()
     metrics.compute_cm(plot=True)
 
-    dest_dir = opt.deploy_data + '_static_html' if opt.lab_config else os.path.dirname(opt.deploy_data)
+    if opt.lab_config:
+        if os.path.exists(opt.deploy_data + '_processed'):
+            dest_dir = opt.deploy_data + '_processed'
+        elif os.path.exists(opt.deploy_data + '_static_html'):
+            dest_dir = opt.deploy_data + '_static_html'
+        else:
+            os.makedirs(opt.deploy_data + '_processed')
+            dest_dir = opt.deploy_data + '_processed'
+    else:
+        dest_dir = os.path.dirname(opt.deploy_data)
+    # dest_dir = opt.deploy_data + '_processed' if opt.lab_config else os.path.dirname(opt.deploy_data)
     metrics.save_predictions(start_datetime, run_time.avg, opt.model_dir,
                              dest_dir)
 
@@ -476,11 +503,11 @@ if __name__ == '__main__':
                 os.mkdir(temp_path)
             opt.model_dir = '/data6/plankton_test_db_new/model/' + date + '/' + datetime.now().strftime("%H:%M:%S") + '/'
             os.mkdir(opt.model_dir)
-            os.mkdir(opt.model_dir+'figs/')  
+            os.mkdir(opt.model_dir+'figs/')
     
     # Initialize Logger
     Logger(log_filename=os.path.join(opt.model_dir, '{}.log'.format(opt.mode)),
-                    level=logging.DEBUG, log2file=opt.log2file)
+                    level=logging.INFO, log2file=opt.log2file)
     logger = logging.getLogger('go-train')
     Logger.section_break('User Config')
     logger.info(pformat(opt._state_dict()))

@@ -44,7 +44,7 @@ class Trainer(object):
         self.computing_device = self._set_cuda()
 
         self.model = model.to(self.computing_device)
-        print("Model on CUDA?", next(self.model.parameters()).is_cuda)
+        self.logger.debug("Model on CUDA? {}".format(next(self.model.parameters()).is_cuda))
         self.model_dir = model_dir
         if not os.path.isdir(self.model_dir):
             os.makedirs(self.model_dir)
@@ -101,7 +101,7 @@ class Trainer(object):
     def load_checkpoint(self, filename):
         """Load checkpoint"""
         if os.path.isfile(filename):
-            print("=> loading checkpoint '{}'".format(filename))
+            self.logger.debug("=> loading checkpoint '{}'".format(filename))
             checkpoint = torch.load(filename)
             self.start_epoch = checkpoint['epoch']
             self.best_err = checkpoint['best_loss']
@@ -146,7 +146,7 @@ class Trainer(object):
         use_cuda = torch.cuda.is_available()
         if use_cuda:
             computing_device = torch.device("cuda")
-            print("CUDA is supported")
+            self.logger.debug("CUDA is supported")
             self.logger.debug('PYTORCH Version: {}'.format(torch.__version__))
             self.logger.debug('CUDA Version: {}'.format(torch.version.cuda))
         else:
