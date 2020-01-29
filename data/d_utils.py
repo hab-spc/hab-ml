@@ -1,13 +1,18 @@
 """ """
 import logging
+import sys
 # Standard dist imports
-from collections import OrderedDict
 
 # Third party imports
+import numpy as np
 import pandas as pd
-
+import torch
+from PIL import Image
 
 # Project level imports
+from utils.config import opt
+from utils.constants import Constants as CONST
+
 
 # Module level constants
 
@@ -22,143 +27,92 @@ def read_csv_dataset(csv_file, verbose=False):
         print(df.head())
     return df
 
-def read_image():
+def pil_loader(path):
+    return Image.open(path)
+
+
+def numpy2tensor(x):
+    if x.ndim == 3:
+        x = np.transpose(x, (2, 0, 1))
+    elif x.ndim == 4:
+        x = np.transpose(x, (3, 0, 1, 2))
+    return torch.from_numpy(x)
+
+
+def tensor2numpy(x):
+    return x.data.numpy()
+
+
+def pil2numpy(x):
+    return np.array(x).astype(np.float32)
+
+
+def numpy2pil(x):
+    mode = 'RGB' if x.ndim == 3 else 'L'
+    return Image.fromarray(x, mode=mode)
+
+
+def rgb_preproc(img):
+    img = (2. * img[:, :, :3] / 255. - 1).astype(np.float32)
+    return img
+
+
+def inverse_normalize():
+    """#TODO Write function to un-normalize image to visualize
+        During training, if we need to debug, we need to have this as an option
+        This entails stuff like changing it back into numpy, BGR -> RGB,
+        untransposing it. It won't necessarily include everything I just
+        said, but to get an idea of what you gotta do to visualize the image again.
+    """
     pass
 
-def center_crop():
-    pass
 
-def verify_dates():
-    import glob
-    import os
-
-    data_dict = {}
-    for data in ['good_proro', 'bad_proro']:
-        img = {}
-        images = glob.glob (
-            '/data4/plankton_wi17/plankton/plankton_binary_classifiers/plankton_phytoplankton/images_orig/{}/*'.format(data))
-        img['images'] = sorted([os.path.basename (i).replace ('jpg', 'tif') for i in images])
-        img['times'] = sorted([i.split('-')[1] for i in img['images']])
-        data_dict[data] = img
-    data_dict['bad_proro']['spc2'] = [i.split('-')[1] for i in data_dict['bad_proro']['images'] if 'SPC2' in i]
-    data_dict['bad_proro']['spcp2'] = [i.split ('-')[1] for i in data_dict['bad_proro']['images'] if 'SPCP2' in i]
-
-def save_predictions(img_paths, gtruth, predictions, probs, label_file, output_fn):
-    # df = pd.DataFrame({
-    #     'image':img_paths,
-    #     'gtruth':gtruth,
-    #     'predictions':predictions,
-    #     'confidence_level': calculate_confidence_lvl(probs)
-    # })
-    data = OrderedDict()
-    data['image'] = img_paths
-    data['gtruth'] = gtruth
-    data['predictions'] = predictions
-    data['confidence_level'] = calculate_confidence_lvl(probs)
-    df = pd.DataFrame(data)
-    df = map_labels(df, label_file, 'predictions')
-    try:
-        df.to_csv(output_fn)
-    except:
-        print('{} does not exist'.format(output_fn))
-
-def train_val_split(df, label_col='label', partition=0.15, seed=42,
-                    logger=None):
-    from sklearn.model_selection import train_test_split
-
-    logger = logger if logger else logging.getLogger('train-val-split')
-    logger.debug('Training validation split (partition={})'.format(partition))
-
-    train, val, _, _ = train_test_split(df, df[label_col],
-                                        test_size=partition, random_state=seed)
-    logger.info('Training size: {} | Validation size: {}\n'.format(
-        train.shape[0], val.shape[0]))
-    logger.debug('Training distribution')
-    logger.debug(train[label_col].value_counts())
-    logger.debug('Validation distribution')
-    logger.debug(val[label_col].value_counts())
-
-    train = train.reset_index(drop=True)
-    val = val.reset_index(drop=True)
-    return train, val
-
-def preprocess_dataframe(df, logger=None, proro=False, enable_uniform=False):
-    logger = logger if logger else logging.getLogger('preprocess-df')
-
-    if proro:
-        df_ = df.copy()
-        logger.debug(df_.head())
-        logger.debug('Size: {}\n'.format(df_.shape))
-
-        df_ = filter_classes(df_)
-
-        if enable_uniform:
-            df_ = sample_uniformly(df_)
-
-        return df_
-
-def filter_classes(df, logger=None):
-    logger = logger if logger else logging.getLogger('filter-cls')
-    logger.debug('Filtering classes')
-
-    curr_size = df.shape
-    df = df[(df['label'] == 'good_proro') |
-              (df['label'] == 'bad_proro')].reset_index(drop=True)
-    filtered_size = df.shape
-    logger.debug('Filtered for binary prorocentrum classes. {} -> {} ({'
-                 '})\n'.format(curr_size[0], filtered_size[0],
-                             curr_size[0] - filtered_size[0]))
-    return df
-
-
-def sample_uniformly(df, label_col='label', sample_avg=False, seed=42,
-                     logger=None):
-    logger = logger if logger else logging.getLogger('sample-uniformly')
-    logger.debug('Sampling uniformly')
-
-    img_counts = df[label_col].value_counts().to_dict()
-    logger.debug('Img Counts: {}'.format(img_counts))
-
-    sample_size = 0
-    if sample_avg:
-        sample_size = int(df[label_col].value_counts().mean())
+def grab_classes(mode, df_unique=None, filename=None):
+    """
+    Fill in CLASSES glob variable depends on different modes
+    if in train mode, create CLASSES out of train.csv.
+    if in val/deploy mode, retrieve CLASSES from the given filename
+    """
+    logger = logging.getLogger('grab_classes')
+    if mode == CONST.TRAIN:
+        classes = df_unique
     else:
-        sample_size = int(df[label_col].value_counts().min())
-    logger.debug('Sample size (sample_avg={}): {}'.format(sample_avg, sample_size))
 
-    sampled_classes = {k: v for k,v in img_counts.items() if v > sample_size}
-    for cls in sampled_classes:
-        n = sampled_classes[cls]-sample_size
-        temp = df[df[label_col] == cls].sample(n=n, random_state=seed)
-        df = df.drop(temp.index)
+        # check if file is able to be opened
+        try:
+            f = open(filename, 'r')
+        except Exception as e:
+            logger.error(e)
+            sys.exit()
 
-        cls_size = df[df[label_col] == cls].shape[0]
-        logger.debug('Cls {}: removed {} samples | size: {}'.
-                     format(cls, n, cls_size))
+        classes = parse_classes(filename)
 
-    final_img_counts = df[label_col].value_counts().to_dict()
-    logger.debug('Final distribution: {}'.format(final_img_counts))
-    logger.debug('\n')
-    return df
-
-def clean_up(data, check_exist=False):
-    """Clean up dataframe before loading"""
-    assert 'image_url' in data.columns.values
-    import os
-    df = data.copy()
-    image_dir = '/data6/lekevin/hab-master/hab-spc/phytoplankton-db/field_2017' #HACKEY
-    df['images'] = df['image_url'].apply(
-        lambda x: os.path.join(image_dir, os.path.basename(x) + '.jpg'))
-    #TODO include flag to check if image file is readable
-    if check_exist:
-        df['exists'] = df['image'].map(os.path.isfile)
-        df = df[df['exists'] == True].reset_index(drop=True)
-    # TEMPORARY
-    #TODO get label from the SPICI 'user_labels'
-    df['label'] = 1 # unknown labels
-    return df
+    return sorted(classes)
 
 
+def parse_classes(filename):
+    """Parse MODE_data.info file"""
+    lbs_all_classes = []
+    with open(filename, 'r') as f:
+        label_counts = f.readlines()
+    label_counts = label_counts[:-1]
+    for i in label_counts:
+        class_counts = i.strip()
+        class_counts = class_counts.split()
+        class_name = ''
+        for j in class_counts:
+            if not j.isdigit():
+                class_name += (' ' + j)
+        class_name = class_name.strip()
+        lbs_all_classes.append(class_name)
+    return lbs_all_classes
 
-
-
+def get_mapping_dict(mapping_csv=None, original_label_col='Original Label',
+                     mapped_label_col='New Label'):
+    logger = logging.getLogger(__name__)
+    if not mapping_csv:
+        mapping_csv = opt.hab_eval_mapping
+        logger.debug(f'Classes file not given. Defaulting to {mapping_csv}')
+    mapping_df = pd.read_csv(mapping_csv)
+    mapping_dict = dict(zip(mapping_df[original_label_col], mapping_df[mapped_label_col]))
+    return mapping_dict

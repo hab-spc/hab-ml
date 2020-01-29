@@ -9,6 +9,7 @@ import os
 import random
 import sys
 from pathlib import Path
+
 # Standard dist imports
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -26,8 +27,9 @@ DEBUG = False
 INSITU = 'hab_in_situ'
 OTHER_LBL = 'other'
 
+
 class DatasetGenerator(object):
-    def __init__(self, csv_file, data_dir, labels, dates):
+    def __init__(self, csv_file, data_dir, labels=None, dates=None, pier=None, lab=None):
         # Initialize main data directory to save data
         self.data_dir = os.path.join(opt.data_dir.format(data_dir))
 
@@ -36,13 +38,21 @@ class DatasetGenerator(object):
             self.data = read_csv_dataset(csv_file)
         except:
             raise FileNotFoundError('File does not exist: {}'.format(csv_file))
-        
+
+        if pier:
+            self.data = self.add(pier)
+
+        if lab:
+            self.data = self.add(lab)
+
+        # TODO inteligently sample added data
+
         # preprocess insitu datasets for empty, double labels
         # if not workshop, but insitu
         print('Cleaning & filtering dataframe\n')
         parts = os.path.basename(csv_file)
         if INSITU in parts and (not parts.split('.')[0].endswith('workshop2019')):
-            self.data = self.clean_raw_data()
+            self.data = DatasetGenerator.clean_raw_pier_labels(data=self.data)
 
         # Given a labels txt file of the selected labels
         # filter the dataset
@@ -54,9 +64,30 @@ class DatasetGenerator(object):
         if dates:
             self.data = self.filter_dates(dates)
 
-    def clean_raw_data(self, annotated_label_col=SPC_CONST.USR_LBL, gtruth_label_col=SPC_CONST.LBL, drop=False):
-        """Clean raw data (i.e. parse labels"""
+    def add(self, data_fname):
+        data = read_csv_dataset(data_fname)
+        # read in hab species, then filter labels based off that
+        #todo filtering labels
+        classes = {1: 'Akashiwo',
+                   2: 'Ceratium falcatiforme or fusus',
+                   3: 'Ceratium furca',
+                   6: 'Chattonella',
+                   8: 'Cochlodinium',
+                   11: 'Gyrodinium',
+                   12: 'Lingulodinium polyedra',
+                   15: 'Prorocentrum michans',
+                   17: 'Pseudo-nitzschia chain'}
+        data['label'] = data['label'].map(classes)
+        data = data[data['label'].isin(classes.values())].reset_index(drop=True)
+
         df = self.data.copy()
+        return pd.concat([df, data])
+
+    @staticmethod
+    def clean_raw_pier_labels(data, annotated_label_col=SPC_CONST.USR_LBL,
+                              gtruth_label_col=SPC_CONST.LBL, drop=False):
+        """Clean raw data (i.e. parse labels"""
+        df = data.copy()
 
         def map_labels(x):
             label = eval(x)
@@ -99,18 +130,27 @@ class DatasetGenerator(object):
         df = self.data.copy()
         return df[df[date_col].isin(dates)].reset_index(drop=True)
 
-    def filter_labels(self, labels_txt_file, label_col=SPC_CONST.LBL):
+    def filter_labels(self, labels_txt_file, data=None, label_col=SPC_CONST.LBL):
         """Select classes given a label text file"""
         # Read labels
         labels = self._read_labels(labels_txt_file)
 
-        df = self.data.copy()
+        if data:
+            df = data.copy()
+        else:
+            df = self.data.copy()
+
         df = df[df[label_col].isin(labels.values())].reset_index(drop=True)
         return df
 
     def train_val_split(self):
         data_dir = self.data_dir
         df = self.data.copy()
+
+        # randomly shuffle the rows in df
+        print('Randomly Shuffle the Dataset')
+        df.sample(frac=1)
+
         freq = df[SPC_CONST.LBL].value_counts()
         print('\n{0:*^80}'.format(' Image/Class Statistics '))
         print('Image/Class Frequency:\n{}\n{}\n'.format('-' * 30, freq))
@@ -166,6 +206,7 @@ class DatasetGenerator(object):
         train_df = pd.DataFrame()
         # shuffle dataset
         df = df.iloc[np.random.permutation(len(df))]
+        df = df.reset_index(drop=True)
         for i in classes:
             # given the number of images per class within training dictionary
             # sample without replacement that given amount
@@ -177,26 +218,35 @@ class DatasetGenerator(object):
             df = df.drop(temp)
         val_df = df.reset_index(drop=True)
 
-        #=== Dataset stats logging & saving ===#
+        # === Labels Processing ===#
+        print('Start Labels Processing')
+        # Combined Straight + Curved diatom chains into diatom chain
+        print('Combine Curved and Straight diatom chain into diatom chain')
+        train_df.loc[train_df[SPC_CONST.LBL].isin(
+            ['Curved diatom chain', 'Straight diatom chains']), SPC_CONST.LBL] = 'diatom chain'
+        val_df.loc[val_df[SPC_CONST.LBL].isin(
+            ['Curved diatom chain', 'Straight diatom chains']), SPC_CONST.LBL] = 'diatom chain'
+
+        # === Dataset stats logging & saving ===#
         print('Train and Val Dataframe contructed')
         print('Train Dataframe Class Counts table')
         print(train_df['label'].value_counts())
         print('VAL Dataframe Class Counts table')
         print(val_df['label'].value_counts())
 
-        #Store csv and info.txt
+        # Store csv and info.txt
         if not os.path.isdir(data_dir):
             os.mkdir(data_dir)
-        train_path = os.path.join(data_dir,'train.csv')
+        train_path = os.path.join(data_dir, 'train.csv')
         train_df.to_csv(train_path, index=False)
-        print('Train Dataframe is stored to '+train_path)
+        print('Train Dataframe is stored to ' + train_path)
 
-        val_path = os.path.join(data_dir,'val.csv')
+        val_path = os.path.join(data_dir, 'val.csv')
         val_df.to_csv(val_path)
         print('Validation Dataframe is stored to ' + val_path)
 
-        info_path = os.path.join(data_dir,'info.txt')
-        print('Info is stored to '+ info_path)
+        info_path = os.path.join(data_dir, 'info.txt')
+        print('Info is stored to ' + info_path)
         f = open(info_path, 'w')
         sys.stdout = f
         print('Train and Test Dataframe contructed')
@@ -256,10 +306,12 @@ class DatasetGenerator(object):
         return labels
 
 
-def prepare_db(split, csv_file_path, data_dir, labels_txt=None, dates=None):
+def prepare_db(split, csv_file_path, data_dir,
+               labels_txt=None, dates=None, add_pier=None, add_lab=None):
     # Select subset of the dataset according to the dates and classes
     # if given dates and classes txt files
-    gen = DatasetGenerator(csv_file_path, data_dir, labels_txt, dates)
+    gen = DatasetGenerator(csv_file_path, data_dir, labels_txt, dates, add_pier, add_lab)
+
     # split the dataset if specified
     if split:
         gen.train_val_split()
@@ -267,7 +319,6 @@ def prepare_db(split, csv_file_path, data_dir, labels_txt=None, dates=None):
     # then save the dataset as default
     else:
         gen.save()
-
 
 if __name__ == '__main__':
     # Parse arguments
@@ -277,8 +328,12 @@ if __name__ == '__main__':
     parser.add_argument('--labels', default=None, type=str, help='Absolute labels filepath')
     parser.add_argument('--data_dir', default=None, type=str, required=True, help='Relative data directory to DB')
     parser.add_argument('--dates', default=None, type=str, help='Absolute dates filepath')
+    parser.add_argument('--add_pier', default=None, type=str, help='Absolute csv filepath (pier)')
+    parser.add_argument('--add_lab', default=None, type=str, help='Absolute csv filepath (lab)')
+    parser.add_argument('--reformat_db', action='store_true', help='Flag for reformatting dataset')
     args = parser.parse_args()
 
     # Prepare the dataset for training and validation
     prepare_db(split=args.train_val_split, csv_file_path=args.csv,
-               data_dir=args.data_dir, labels_txt=args.labels, dates=args.dates)
+               data_dir=args.data_dir, labels_txt=args.labels, dates=args.dates,
+               add_pier=args.add_pier, add_lab=args.add_lab)

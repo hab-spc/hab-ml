@@ -1,10 +1,11 @@
 from __future__ import absolute_import
 
-import os
+import logging
 
+import os
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 
-import torch
+from datetime import datetime
 
 from utils.constants import Constants as CONST
 
@@ -30,9 +31,16 @@ class Config:
 
     # Mode
     mode = CONST.TRAIN
+    interactive = False
 
     # Data
-    data_dir = "./DB/{}"
+    data_dir = "../data/DB/{}"
+    classes_fname = "train_data.info"
+    #todo double check if hab_eval_classes used elsewhere
+    hab_eval_classes = '/data6/phytoplankton-db/hab.txt'
+    hab_eval_mapping = '/data6/phytoplankton-db/hab_mapping.csv'
+    hab_in_situ_summer2019 = '/data6/phytoplankton-db/csv/hab_in_situ_summer2019.csv'
+    hab_in_vitro_summer2019 = '/data6/phytoplankton-db/csv/hab_in_vitro_summer2019.csv'
 
     # Network
     arch = 'resnet50'
@@ -40,9 +48,12 @@ class Config:
     input_size = 224
 
     # Training hyperparameters
+    pretrained = False
     lr = 0.001
     epochs = 15
     batch_size = 16
+    weighted_loss = True
+    freezed_layers = 0
 
     # Optimizer
     use_adam = True
@@ -50,11 +61,11 @@ class Config:
     use_adagrad = False
 
     # Pytorch
-    gpu = '2'
-    if torch.cuda.is_available():
+    gpu = '0'
+    os.environ["CUDA_VISIBLE_DEVICES"] = gpu
+    if gpu != None:
         num_workers = 8
         pin_memory = True
-        # os.environ["CUDA_VISIBLE_DEVICES"] = gpu
     else:
         num_workers = 0
         pin_memory = False
@@ -66,9 +77,12 @@ class Config:
     early_stop = True
     estop_threshold = 3
     log2file = False
+    save_model_db = False
+    logging_level = 20 # logging.INFO = 20, loggin.DEBUG = 10
 
     #model sql
-    model_date = 0
+    model_sql_db = '/data6/plankton_test_db_new/model/'
+    model_date = datetime.now().strftime("%Y%m%d")
     sql_yn = 'n'
     sql_weight_path = ''
     train_acc = 0
@@ -76,21 +90,25 @@ class Config:
     class_num = 2
     add_comm = ''
     sql_log_path = ''
-    f_l = 0
+    freezed_layers = 0
     
     # Deploy Hyperparameters
     lab_config = False
     deploy_data = None
+    hab_eval = False
+    
+    # Dataloader
+    classes = None
 
     def _parse(self, kwargs):
         state_dict = self._state_dict()
         for k, v in kwargs.items():
             if k not in state_dict:
                 raise ValueError('UnKnown Option: "--%s"' % k)
-            if k == 'gpu':
-                if torch.cuda.is_available():
-                    os.environ["CUDA_VISIBLE_DEVICES"] = v
-                    print(v)
+            if k == CONST.GPU:
+                os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+                os.environ["CUDA_VISIBLE_DEVICES"] = v
+
             setattr(self, k, v)
 
         # print('======user config========')

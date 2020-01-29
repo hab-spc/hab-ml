@@ -76,9 +76,12 @@ class model_sql:
         """
         opt.add_comm = input('Any Addtional Comment to this model? \n')
         with self.conn:
-            self.c.execute("INSERT INTO models VALUES (NULL, :type, :m_d_p, :f_l, :f_t, :lr, :bs, :train_acc, :test_acc, :ep, :date, :cl, :comment)",
-                          {'type':opt.arch, 'm_d_p': opt.model_dir,'f_l': opt.f_l, 'f_t': 'n', 'lr':opt.lr, 'bs':opt.batch_size, 'train_acc': opt.train_acc, 'test_acc': opt.test_acc, 'ep':opt.epochs, 'date': opt.model_date, 'cl':opt.class_num, 'comment': opt.add_comm })
-    
+            self.c.execute(
+                "INSERT INTO models VALUES (NULL, :type, :m_d_p, :f_l, :f_t, :lr, :bs, :train_acc, :test_acc, :ep, :date, :cl, :comment)",
+                {'type': opt.arch, 'm_d_p': opt.model_dir, 'f_l': opt.freezed_layers, 'f_t': 'n', 'lr': opt.lr,
+                 'bs': opt.batch_size, 'train_acc': opt.train_acc, 'test_acc': opt.test_acc, 'ep': opt.epochs,
+                 'date': opt.model_date, 'cl': opt.class_num, 'comment': opt.add_comm})
+
     def close(self):
         """
         Close the sqlite connection

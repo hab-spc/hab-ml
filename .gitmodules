@@ -2,3 +2,6 @@
 	path = spc
 	url = https://github.com/hab-spc/spici.git
 	branch = master
+[submodule "utils/hab-mlviewer"]
+	path = utils/hab-mlviewer
+	url = https://github.com/janAntu/hab-mlviewer.git

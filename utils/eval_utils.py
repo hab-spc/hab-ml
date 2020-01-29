@@ -3,6 +3,7 @@ import json
 import logging
 import math
 import os
+from ast import literal_eval
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,6 +11,8 @@ import pandas as pd
 import torch.nn as nn
 
 from utils.config import opt
+from utils.constants import Constants as CONST
+from data.label_encoder import HABLblEncoder
 
 mpl_logger = logging.getLogger('matplotlib')
 mpl_logger.setLevel(logging.WARNING)
@@ -36,6 +39,21 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
         self.std = np.std(self.data)
 
+def print_eval(params, run_time, err, acc, results_dir):
+    logger = logging.getLogger('print_eval')
+    log = '[PARAMETERS] {params}'.format(params=params)
+    logger.info(log)
+    log = '[RUN TIME] {time.avg:.3f} sec/sample'.format(time=run_time)
+    logger.info(log)
+    log = '[FINAL] {name:<30} {loss:.7f}'.format(
+        name='{}/{}'.format(opt.mode.upper(), 'crossentropy'), loss=err)
+    logger.info(log)
+    log = '[FINAL] {name:<30} {acc:.7f}'.format(
+        name='{}/{}'.format(opt.mode.upper(), 'accuracy'), acc=acc)
+    logger.info(log)
+    log = '[FIGS] {}'.format(results_dir)
+    logger.info(log)
+
 def get_meter(meters=['batch_time', 'loss', 'acc']):
     return {meter_type: AverageMeter() for meter_type in meters}
 
@@ -45,12 +63,6 @@ def accuracy(predictions, targets, axis=1):
     hits = predictions.eq(targets)
     acc = 100. * hits.sum().float() / float(batch_size)
     return acc
-
-class NumpyEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        return json.JSONEncoder.default(self, obj)
 
 class EvalMetrics(object):
     def __init__(self, classes, predictions=[], gtruth=[], ids=[],
@@ -66,6 +78,10 @@ class EvalMetrics(object):
         self.probabilities = []
         self.softmax = nn.Softmax(dim=1)
 
+        self.le = HABLblEncoder()
+
+        self.logger = logging.getLogger(__name__)
+
     def update(self, predictions, targets, ids, axis=1):
         # TODO save image id along with predicitons to save back to image files
         probs = self.softmax(predictions).detach().data.cpu().numpy()
@@ -80,6 +96,13 @@ class EvalMetrics(object):
 
         ids = ids
         self.ids.extend(ids)
+    
+    def compute_acc(self):
+        c=0
+        for t, p in zip(self.gtruth, self.predictions):
+            if t==p:
+                c+=1
+        return c/len(self.gtruth)*100
 
     def compute_cm(self, plot=False):
         # Create array for confusion matrix with dimensions based on number of classes
@@ -141,7 +164,7 @@ class EvalMetrics(object):
         class_diag = self.classes.copy()
         class_diag = [x for _,x in sorted(zip(cm_diag,class_diag))]
         cm_diag.sort()
-        with open(opt.model_dir+'figs/'+'confusion_diag.txt', 'w') as the_file:
+        with open(os.path.join(opt.model_dir,'figs/confusion_diag.txt'), 'w') as the_file:
             for i in range(len(cm_diag)):
                 line = '{:>39}  {:>12}'.format(class_diag[i], str(cm_diag[i]))
                 the_file.write(line+'\n')
@@ -151,56 +174,33 @@ class EvalMetrics(object):
                          model_version=None, dest_dir=None):
         """Load predictions into json file"""
         from datetime import datetime
-        import json
         date_fmt = '%Y-%m-%d_%H:%M:%S'
 
-        key_fmt = ['image_id', 'gtruth', 'pred', 'prob']
+        # preprocess probabilities
+        probabilities = [np.max(prob) for prob in self.probabilities]
+
+        # construct prediction dataframe
         total_smpls = len(self.ids)
-        json_dict = {
-            'start-datetime': start_datetime,
-            'end-datetime': datetime.today().strftime(date_fmt),
-            'total-samples': total_smpls,
-            'run_time': run_time,
-            'model_version': model_version,
-            'machine_labels': [],
-        }
-        for i in range(total_smpls):
-            dd = [self.ids[i], int(self.gtruth[i]), int(self.predictions[i]),
-                  self.probabilities[i]]
-            key_fmt = ['image_id', 'gtruth', 'pred', 'prob']
-        # dd = [self.ids[i], int(self.gtruth[i]), int(self.predictions[i])]
-            params = dict(zip(key_fmt, dd))
-            json_dict['machine_labels'].append(params)
+        pred_cols = [CONST.IMG, CONST.PRED, CONST.PROB, CONST.PRED_TSTAMP,
+                     CONST.MODEL_NAME]
+        data = [self.ids, self.predictions, probabilities,
+                [datetime.today().strftime(date_fmt)]*total_smpls,
+                [model_version]*total_smpls]
+        pred_df = pd.DataFrame(dict(zip(pred_cols, data)))
 
-        # Save as csv file
-        #TODO figure out better way to append predictions to csv file
-        if not opt.lab_config:
-            csv_fname = opt.deploy_data.strip('.csv') + '-predictions.csv'
-            df = pd.read_csv(opt.deploy_data)
-            pred_df = pd.DataFrame(json_dict['machine_labels'])
-            pred_df = pred_df.rename({'gtruth': 'label'}, axis=1)
+        # decode predictions
+        pred_df[CONST.PRED] = self.le.inverse_transform(pred_df[CONST.PRED].values)
+        pred_df[CONST.HAB_PRED] = self.le.hab_transform(pred_df[CONST.PRED].values)
 
-            def extract_img_id(x):
-                return os.path.basename(x).split('.')[0] + '.tif'
+        # merge into original csv
+        orig_df = pd.read_csv(opt.deploy_data)
+        merged_df = orig_df.merge(pred_df, on=CONST.IMG)
 
-            pred_df['image_id'] = pred_df['image_id'].apply(extract_img_id)
-            merged = df.merge(pred_df, on='image_id')
-            merged.to_csv(csv_fname, index=False)
-            print('Predictions saved to {}'.format(csv_fname))
-
-        # Save as json file
-        unique_id = datetime.now().strftime('%Y%m%d%H%M%S')
-        dest_dir = os.path.dirname(dest_dir)
-        if opt.lab_config == False:
-            json_fname = os.path.join(dest_dir, 'predictions_'+unique_id+'.json')
-        else:
-            json_fname = os.path.join(dest_dir, 'predictions.json')
-        with open(json_fname, 'w', encoding='utf-8') as json_file:
-            json.dump(json_dict, json_file, indent=4, separators=(',', ':'),
-                      sort_keys=True, cls=NumpyEncoder)
-        json_file.close()
-
-        print('Predictions saved to {}'.format(json_fname))
+        csv_fname = os.path.join(
+            opt.model_dir, os.path.basename(opt.deploy_data).strip('.csv') +
+                           '-predictions.csv')
+        merged_df.to_csv(csv_fname, index=False)
+        self.logger.info('Predictions saved to {}'.format(csv_fname))
 
 
 def vis_training(train_points, val_points, num_epochs=0, loss=True, **kwargs):

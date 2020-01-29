@@ -42,8 +42,12 @@ class Logger(object):
         logging.info('Logger initialized @ {}'.format(datetime.datetime.now()))
 
     @staticmethod
-    def section_break(title):
-        logging.debug("="*30 + "   {}   ".format(title) + "="*30)
+    def section_break(title, log_level=20):
+        title = "="*30 + "   {}   ".format(title) + "="*30
+        if log_level == 10:
+            logging.debug(title)
+        elif log_level == 20:
+            logging.info(title)
 
 if __name__ == '__main__':
     """Example for usage"""

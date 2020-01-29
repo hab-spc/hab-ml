@@ -8,6 +8,9 @@ An example to instantiate the model is given below
 import collections
 import logging
 import os
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # Third party imports
 import torch
@@ -193,14 +196,16 @@ def freezing_layers(model):
     total_conv_layers = idx
     logger.info('There are total '+str(idx)+' conv layers.')
 
-    opt.f_l = int(input('Enter number of layers to freeze? (ex. 0) \n'))
-    logger.info('Number of Freezed Layers '+str(opt.f_l))
+    if opt.interactive:
+        opt.freezed_layers = int(input('Enter number of layers to freeze? (ex. 0) \n'))
+
+    logger.info('Number of Freezed Layers ' + str(opt.freezed_layers))
     idx = 0
     last = False
     for name, param in model.named_parameters():
         if 'conv' in name:
             idx += 1
-        if idx <= opt.f_l and last == False:
+        if idx <= opt.freezed_layers and last == False:
             param.requires_grad = False
             if idx == total_conv_layers:
                 last = True

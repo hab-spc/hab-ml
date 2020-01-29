@@ -1,28 +1,29 @@
 """Dataloader
 
-#TODO DataLoader descriptio needed
+#TODO DataLoader description needed
 
 """
 import logging
 # Standard dist imports
 import os
-import sys
 
 # Third party imports
 import numpy as np
 import pandas as pd
+from PIL import Image
 import torch
 import torch.utils.data as data
 import torchvision.transforms as transforms
-from PIL import Image
 from torch.autograd import Variable
 from torch.utils.data import Dataset
 
 # Project level imports
-from data.prepare_db import prepare_db, create_lab_csv
+from data.d_utils import pil_loader, grab_classes
+from data.label_encoder import HABLblEncoder
 from utils.config import opt
 from utils.constants import Constants as CONST
 from utils.constants import SPCConstants as SPC_CONST
+from utils.logger import Logger
 
 # Module level constants
 #TODO make this dictionary dynamic according to the data loaded
@@ -30,123 +31,7 @@ from utils.constants import SPCConstants as SPC_CONST
 CLASSES = {}
 UNKNOWN = {999: 'Unknown'}
 NUM_CLASSES = len(CLASSES.keys())
-DEVELOP = False
 
-#TODO move all these functions to d_utils.py and import them over here
-def pil_loader(path):
-    return Image.open(path)
-
-def numpy2tensor(x):
-    if x.ndim == 3:
-        x = np.transpose(x, (2, 0, 1))
-    elif x.ndim == 4:
-        x = np.transpose(x, (3, 0, 1, 2))
-    return torch.from_numpy(x)
-
-def tensor2numpy(x):
-    return x.data.numpy()
-
-def pil2numpy(x):
-    return np.array(x).astype(np.float32)
-
-def numpy2pil(x):
-    mode = 'RGB' if x.ndim == 3 else 'L'
-    return Image.fromarray(x, mode=mode)
-
-def rgb_preproc(img):
-    img = (2.*img[:, :, :3]/255. - 1).astype(np.float32)
-    return img
-
-def inverse_normalize():
-    """#TODO Write function to un-normalize image to visualize
-        During training, if we need to debug, we need to have this as an option
-        This entails stuff like changing it back into numpy, BGR -> RGB,
-        untransposing it. It won't necessarily include everything I just
-        said, but to get an idea of what you gotta do to visualize the image again.
-    """
-    pass
-
-def to_cuda(item, computing_device, label=False):
-    """ Typecast item to cuda()
-
-    Wrapper function for typecasting variables to cuda() to allow for
-    flexibility between different types of variables (i.e. long, float)
-
-    Loss function usually expects LongTensor type for labels, which is why
-    label is defined as a bool.
-
-    Computing device is usually defined in the Trainer()
-
-    Args:
-        item: Desired item. No specific type
-        computing_device (str): Desired computing device.
-        label (bool): Flag to convert item to long() or float()
-
-    Returns:
-        item
-    """
-    if label:
-        item = Variable(item.to(computing_device)).long()
-    else:
-        item = Variable(item.to(computing_device)).float()
-    return item
-    
-
-def create_class_dict (lbs_all_classes):
-    """
-    input: all classes labels which are unsorted
-    Helper Function: Sort class labels and assign them to global CLASSES vairable
-    """
-    global CLASSES
-    lbs_all_classes.sort()
-    CLASSES = {}
-    c = 0
-    for i in lbs_all_classes:
-        CLASSES[c] = i
-        c+=1
-    NUM_CLASSES = len(CLASSES.keys())
-    opt.class_num = len(lbs_all_classes)
-    
-    
-def grab_classes (mode, df_unique = None, filename = None):
-    """
-    Fill in CLASSES glob variable depends on different modes
-    if in train mode, create CLASSES out of train.csv.
-    if in val/deploy mode, retrieve CLASSES from the given filename
-    """
-    if mode == CONST.TRAIN:
-        lbs_all_classes = df_unique
-    else:
-
-        #check if file is able to be opened
-        try:
-            f = open(filename,'r')
-        except Error as e:
-            logger.debug(e)
-            sys.exit()
-
-        lbs_all_classes = parse_classes(filename)
-
-    create_class_dict (lbs_all_classes)
-
-
-def parse_classes(filename):
-    """Parse MODE_data.info file"""
-    lbs_all_classes = []
-    with open(filename, 'r') as f:
-        label_counts = f.readlines()
-    label_counts = label_counts[:-1]
-    for i in label_counts:
-        class_counts = i.strip()
-        class_counts = class_counts.split()
-        class_name = ''
-        for j in class_counts:
-            if not j.isdigit():
-                class_name += (' ' + j)
-        class_name = class_name.strip()
-        lbs_all_classes.append(class_name)
-    return lbs_all_classes
-        
 class SPCHABDataset(Dataset):
     """Custom Dataset class for the SPC Hab Dataset
 
@@ -155,11 +40,11 @@ class SPCHABDataset(Dataset):
     CSV files are located in a subdir `.../csv/`
 
     """
-    def __init__(self, data_root, mode='train', input_size=224):
+    def __init__(self, csv_file=None, data_dir=None, mode='train', input_size=224):
         """Initializes SPCHabDataset
 
         Args:
-            data_root (str): Absolute path to the csv dir. If in
+            csv_file (str): Absolute path to the csv dir. If in
                 deploy mode it should be the absolute path to the csv file
                 itself
             mode (str): Mode/partition of the dataset
@@ -176,73 +61,58 @@ class SPCHABDataset(Dataset):
         self.mode = mode
         self.input_size = input_size
         self.rescale_size = input_size
+        Logger.section_break(f'{self.mode.upper()} Dataset')
         self.logger = logging.getLogger('dataloader_'+mode)
+        self.logger.setLevel(opt.logging_level)
         
-        # PROROCENTRUM csv files
-        #TODO refactor code to accept abs path to csv_file rather than
-        # assembling with data_root
-        if self.mode == CONST.DEPLOY:
-            if os.path.isdir(data_root) and opt.lab_config:
-                csv_file = create_lab_csv(data_root)
-            else:
-                csv_file = data_root # Absolute path to the deploy_data
-        else:
-            csv_file = os.path.join(data_root,'{}.csv').format(mode)
+        # === Read in the dataset ===#
+        # options for reading datasets can be from a csv file or directory containing csv files.
+        if self.mode != CONST.DEPLOY:
+            csv_file = os.path.join(data_dir, '{}.csv').format(mode)
+
+        # If deployment, create dataset from csv file
+        # Else (training or validation) access csv file given data directory and mode
         self.data = pd.read_csv(csv_file)
 
-        
-        #get classes
-        filename = os.path.join(opt.model_dir, 'train_data.info')
-        if self.mode != CONST.DEPLOY:
+        # get classes and save it
+        classes_fname = os.path.join(opt.model_dir, '{}_data.info'.format(self.mode))
+        if self.mode == CONST.TRAIN or CONST.VAL:
             df_unique = self.data[SPC_CONST.LBL].unique()
-        else:
-            df_unique = None
-        grab_classes (self.mode, df_unique = df_unique, filename = filename)
-        self.logger.info('All classes detected are: '+str(CLASSES))
-        self.logger.info('opt.class_num = '+str(opt.class_num))
-        
-        #Store data_info
-        if opt.mode != CONST.DEPLOY:
-            data_save_path = os.path.join(opt.model_dir, mode+'_data.info')
-            with open(data_save_path, 'w') as f:
+
+            with open(classes_fname, 'w') as f:
                 f.write(str(self.data[SPC_CONST.LBL].value_counts()))
 
-        if DEVELOP:
-            self.data = self.data.sample(n=100).reset_index(drop=True)
+            # gets classes based off dataframe
+            self.classes = opt.classes = grab_classes(self.mode, df_unique=df_unique)
+        else:
+            # gets classes based off the train_data.info that is written during training
+            self.classes = opt.classes = grab_classes(self.mode, filename=classes_fname)
 
-        if self.mode == CONST.DEPLOY and opt.lab_config == True:
-            if self.check_SPCformat():
-                image_dir = self._get_image_dir(data_root)
-                self.data = prepare_db(data=self.data, image_dir=image_dir,
-                                       csv_file=csv_file)
+        self.num_class = opt.class_num = len(self.classes)
+        self.logger.info('All classes detected are: '+str(self.classes))
+        self.logger.info('opt.class_num = '+str(opt.class_num))
 
         # Clarify what transformations are needed here
         self.data_transform = {
             CONST.TRAIN: transforms.Compose([transforms.Resize(self.rescale_size),
                                              transforms.CenterCrop(input_size),
-                                             transforms.RandomAffine(360, translate=(0.1, 0.1), scale=None, shear=None, resample=False, fillcolor=0),
+                                             transforms.RandomAffine(360, translate=(0.1, 0.1), scale=None, shear=None,
+                                                                     resample=Image.BICUBIC, fillcolor=0),
                                              transforms.ToTensor(),
-                                             transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+                                             # transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
                                              ]),
             CONST.VAL: transforms.Compose([transforms.Resize(self.rescale_size),
                                            transforms.CenterCrop(input_size),
                                            transforms.ToTensor(),
-                                           transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+                                           # transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
                                            ]),
             CONST.DEPLOY: transforms.Compose([transforms.Resize(self.rescale_size),
                                               transforms.CenterCrop(input_size),
                                               transforms.ToTensor(),
-                                              transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+                                              # transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
                                               ])
         }
-        
-        self.classes = sorted(CLASSES.values())
-        self.num_class = len(self.classes)
-        if mode in [CONST.TRAIN, CONST.VAL]:
-            self.class_to_index = {}
-            for cls in self.classes:
-                self.class_to_index[cls] = self.data.index[self.data[SPC_CONST.LBL] ==
-                                                           cls].tolist()
+
 
     def __len__(self):
         return len(self.data)
@@ -271,11 +141,10 @@ class SPCHABDataset(Dataset):
         img = self.data_transform[self.mode](img)
 
         if SPC_CONST.LBL not in self.data.columns:
-            target = eval(self.data.iloc[index]['user_labels'])
-            if target == []:
-                target = 0
+            target = self.data.iloc[index]['user_labels']
         else:
             target = self.data.iloc[index][SPC_CONST.LBL]
+
         if not isinstance(target, (int, np.int64)):
             target = self.encode_labels(target)
 
@@ -311,45 +180,16 @@ class SPCHABDataset(Dataset):
                 cls_idx_lbl = idx
         return cls_idx_lbl
 
-
-    def check_SPCformat(self, prepare_db_flag=False):
-        """Check if SPCFormat for dataset preparation
-
-        #check if dir or file
-        if directory
-        """
-        class_constants = [value for name, value in vars(SPC_CONST).items()
-                           if not name.startswith('__')]
-        for col_name in class_constants:
-            if col_name not in self.data.columns.values:
-                prepare_db_flag = True
-                break
-
-        if prepare_db_flag:
-            return True
-        else:
-            return False
-
-    def _get_image_dir(self, data_root):
-        """Get image dir"""
-        #TODO fix this function for grabbing the image directory
-        master_db_dir = '/data6/lekevin/hab-master/hab-spc/phytoplankton-db'
-        master_db_dir = '/data6/phytoplankton-db/hab_in_situ/hab_field'
-        img_dir = os.path.basename(data_root).split('.')[0]
-        img_dir = os.path.join(master_db_dir, img_dir)
-        if os.path.isdir(img_dir):
-            return img_dir
-        else:
-            raise OSError(f'{img_dir} does not exist')
-
-
-def get_dataloader(data_dir, batch_size=1, input_size=224, shuffle=True,
+def get_dataloader(data_dir=None, csv_file=None, batch_size=1, input_size=224, shuffle=True,
                    num_workers=4, mode=CONST.TRAIN):
     """ Get the dataloader
 
+    Function accepts either data directory or csv file to create a dataloader
+
     Args:
         mode (str):
-        data_dir (str): Absolute path to the csv data files
+        data_dir (str): Relative path to the csv data files
+        csv_file (str): Absolute path of the csv file
         batch_size (int): Batch size
         input_size (int): Image input size
         shuffle (bool): Flag for shuffling dataset
@@ -359,21 +199,57 @@ def get_dataloader(data_dir, batch_size=1, input_size=224, shuffle=True,
         dict: Dictionary holding each type of dataloader
 
     """
-    # Create dataset if it hasn't been created
-    if mode in [CONST.TRAIN, CONST.VAL]:
+
+    # Create a dataset from the training and validation csv files (consolidated in one data directory)
+    logger = logging.getLogger('dataloader')
+    if mode in [CONST.TRAIN, CONST.VAL] and data_dir:
         if not os.path.exists(data_dir) or len(os.listdir(data_dir)) == 0:
-            logger.debug('Data dir not detected. Need to create dataset @ {}'.format(data_dir))
+            logger.error('Data dir not detected. Need to create dataset @ {}'.format(data_dir))
+            raise NotADirectoryError('Directory does not exist')
+
+        else:
+            dataset = SPCHABDataset(data_dir=data_dir, mode=mode,
+                                    input_size=input_size)
+
+    # Else create dataset from the given csv file (assumed for evaluation/deployment use case)
     else:
-        if not os.path.exists(data_dir):
+        if not os.path.exists(csv_file):
             raise ValueError('File does not exist')
 
-    dataset = SPCHABDataset(data_dir, mode=mode,
-                                input_size=input_size)
+        else:
+            dataset = SPCHABDataset(csv_file=csv_file, mode=mode,
+                                    input_size=input_size)
 
+    # Create the dataloader from the given dataset
     data_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
                                                shuffle=shuffle, num_workers=num_workers,
                                                pin_memory=True)
     return data_loader
+
+def to_cuda(item, computing_device, label=False):
+    """ Typecast item to cuda()
+
+    Wrapper function for typecasting variables to cuda() to allow for
+    flexibility between different types of variables (i.e. long, float)
+
+    Loss function usually expects LongTensor type for labels, which is why
+    label is defined as a bool.
+
+    Computing device is usually defined in the Trainer()
+
+    Args:
+        item: Desired item. No specific type
+        computing_device (str): Desired computing device.
+        label (bool): Flag to convert item to long() or float()
+
+    Returns:
+        item
+    """
+    if label:
+        item = Variable(item.to(computing_device)).long()
+    else:
+        item = Variable(item.to(computing_device)).float()
+    return item
 
 if __name__ == '__main__':
     DEBUG_DATALODER = False

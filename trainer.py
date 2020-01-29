@@ -39,12 +39,12 @@ class Trainer(object):
             resume: (str) Path to pretrained model
 
         """
-        logging.basicConfig(level=logging.DEBUG)
         self.logger = logging.getLogger('trainer')
+        self.logger.setLevel(opt.logging_level)
         self.computing_device = self._set_cuda()
 
         self.model = model.to(self.computing_device)
-        print("Model on CUDA?", next(self.model.parameters()).is_cuda)
+        self.logger.debug("Model on CUDA? {}".format(next(self.model.parameters()).is_cuda))
         self.model_dir = model_dir
         if not os.path.isdir(self.model_dir):
             os.makedirs(self.model_dir)
@@ -54,10 +54,15 @@ class Trainer(object):
         self.optimizer = self._get_optimizer(lr=lr)
         
         # Defaulted to CrossEntropyLoss
+        #TODO set interactive mode for setting the losses
         if opt.mode == CONST.TRAIN:
             self.logger.info(class_count)
-            weighted_y_n = input('Do you want to use weighted loss? (y/n)\n')
-            if weighted_y_n == 'y':
+            if opt.interactive:
+                weighted_y_n = input('Do you want to use weighted loss? (y/n)\n')
+            else:
+                weighted_y_n = opt.weighted_loss
+
+            if weighted_y_n or weighted_y_n == 'y':
                 weight = np.array([x for _,x in sorted(zip(class_count.keys().tolist(),class_count.tolist()))])
                 self.logger.info('Class_count is: '+ str(weight))
                 weight = weight/sum(weight)
@@ -76,7 +81,7 @@ class Trainer(object):
 
         if resume or mode == CONST.VAL:
             sql = model_sql()
-            fn = os.path.join(sql.find_model_dir_path(), 'model_best.pth.tar')
+            fn = os.path.join(opt.model_dir, 'model_best.pth.tar')
             sql.close()
             self.load_checkpoint(fn)
 
@@ -101,7 +106,7 @@ class Trainer(object):
     def load_checkpoint(self, filename):
         """Load checkpoint"""
         if os.path.isfile(filename):
-            print("=> loading checkpoint '{}'".format(filename))
+            self.logger.info("=> loading checkpoint '{}'".format(filename))
             checkpoint = torch.load(filename)
             self.start_epoch = checkpoint['epoch']
             self.best_err = checkpoint['best_loss']
@@ -146,7 +151,7 @@ class Trainer(object):
         use_cuda = torch.cuda.is_available()
         if use_cuda:
             computing_device = torch.device("cuda")
-            print("CUDA is supported")
+            self.logger.debug("CUDA is supported")
             self.logger.debug('PYTORCH Version: {}'.format(torch.__version__))
             self.logger.debug('CUDA Version: {}'.format(torch.version.cuda))
         else:
