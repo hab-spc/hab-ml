@@ -56,7 +56,7 @@ class Trainer(object):
         # Defaulted to CrossEntropyLoss
         #TODO set interactive mode for setting the losses
         if opt.mode == CONST.TRAIN:
-            self.logger.info(class_count)
+            self.logger.debug(class_count)
             if opt.interactive:
                 weighted_y_n = input('Do you want to use weighted loss? (y/n)\n')
             else:

@@ -74,7 +74,7 @@ def grab_classes(mode, df_unique=None, filename=None):
     if in val/deploy mode, retrieve CLASSES from the given filename
     """
     logger = logging.getLogger('grab_classes')
-    if mode == CONST.TRAIN:
+    if mode == CONST.TRAIN or mode == CONST.VAL:
         classes = df_unique
     else:
 

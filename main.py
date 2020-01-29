@@ -410,9 +410,11 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=opt.lr)
     parser.add_argument('--epochs', type=int, default=opt.epochs)
     parser.add_argument('--batch_size', '-b', type=int, default=opt.batch_size)
-    parser.add_argument('--weighted_loss', dest=CONST.WEIGHTED_LOSS, action='store_true')
+    parser.add_argument('--weighted_loss', dest=CONST.WEIGHTED_LOSS,
+                        action='store_true', default=opt.weighted_loss)
     parser.add_argument('--freezed_layers', type=int, default=opt.freezed_layers)
-    parser.add_argument('--pretrained', dest=CONST.PRETRAINED, action='store_true')
+    parser.add_argument('--pretrained', dest=CONST.PRETRAINED, action='store_true',
+                        default=opt.pretrained)
 
     # Model hyperparameters
     parser.add_argument('--input_size', type=int, default=opt.input_size)
@@ -422,14 +424,18 @@ if __name__ == '__main__':
     parser.add_argument('--resume', type=str, default=opt.resume)
     parser.add_argument('--print_freq', type=int, default=opt.print_freq)
     parser.add_argument('--save_freq', type=int, default=opt.save_freq)
-    parser.add_argument('--log2file', dest=CONST.LOG2FILE, action='store_true')
+    parser.add_argument('--log2file', dest=CONST.LOG2FILE, action='store_true',
+                        default=opt.log2file)
     parser.add_argument('--logging_level', type=int, default=opt.logging_level)
-    parser.add_argument('--save_model_db', dest=CONST.SAVE_MODEL_DB, action='store_true')
+    parser.add_argument('--save_model_db', dest=CONST.SAVE_MODEL_DB,
+                        action='store_true', default=opt.save_model_db)
 
     # Deploy hyperparameters
     parser.add_argument('--deploy_data', type=str, default=opt.deploy_data)
-    parser.add_argument('--lab_config', dest=CONST.LAB_CONFIG, action='store_true')
-    parser.add_argument('--hab_eval', dest=CONST.HAB_EVAL, action='store_true')
+    parser.add_argument('--lab_config', dest=CONST.LAB_CONFIG, action='store_true',
+                        default=opt.lab_config)
+    parser.add_argument('--hab_eval', dest=CONST.HAB_EVAL, action='store_true',
+                        default=opt.hab_eval)
 
     # # Parse all arguments
     args = parser.parse_args()

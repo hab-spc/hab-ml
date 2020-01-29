@@ -76,7 +76,7 @@ class SPCHABDataset(Dataset):
 
         # get classes and save it
         classes_fname = os.path.join(opt.model_dir, '{}_data.info'.format(self.mode))
-        if self.mode == CONST.TRAIN or CONST.VAL:
+        if self.mode == CONST.TRAIN or self.mode == CONST.VAL:
             df_unique = self.data[SPC_CONST.LBL].unique()
 
             with open(classes_fname, 'w') as f:
