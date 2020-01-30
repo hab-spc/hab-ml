@@ -25,27 +25,23 @@ class HABLblEncoder(LabelEncoder):
                 raise OSError('File not found. Please double check if it has been '
                               'generated via training')
 
-        self.classes_ = grab_classes(mode=self.mode, filename=classes_fname)
+        self.classes = grab_classes(mode=self.mode, filename=classes_fname)
+        self.hab_classes = open(opt.hab_eval_classes, 'r').read().splitlines()
+        self.habcls2idx = {cls:idx for idx, cls in enumerate(self.hab_classes)}
 
         # fit to classes
-        self.fit(self.classes_)
+        self.fit(self.classes)
 
-        # grab hab_eval mapping
-        self.hab_eval_mapping = get_mapping_dict(original_label_col='c34_workshop',
-                                                 mapped_label_col=CONST.HAB_EVAL.upper())
+    def hab_map(self, value):
+        if value in self.hab_classes:
+            return value
+        else:
+            return 'Other'
 
-    def hab_transform(self, values):
-        assert not isinstance(values, str)
-        try:
-            encoded = []
-            values = np.asarray(values)
-            for v in values:
-                # if it already exists in the mapping return the value
-                if v in set(self.hab_eval_mapping.values()):
-                    encoded.append(v)
-                else:
-                    encoded.append(self.hab_eval_mapping[v])
-        except KeyError as e:
-            raise ValueError("y contains previously unseen labels: %s" % str(e))
+    def hab_transform2idx(self, values):
+        self.fit(self.classes)
+        orig_labels = self.inverse_transform(values)
+        # switch to hab mapping
+        temp_habcls = list(map(self.hab_map, orig_labels))
+        return [self.habcls2idx[cls] for cls in temp_habcls]
 
-        return np.array(encoded)

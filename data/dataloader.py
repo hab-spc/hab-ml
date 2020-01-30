@@ -75,8 +75,8 @@ class SPCHABDataset(Dataset):
         self.data = pd.read_csv(csv_file)
 
         # get classes and save it
-        classes_fname = os.path.join(opt.model_dir, '{}_data.info'.format(self.mode))
         if self.mode == CONST.TRAIN or self.mode == CONST.VAL:
+            classes_fname = os.path.join(opt.model_dir, '{}_data.info'.format(self.mode))
             df_unique = self.data[SPC_CONST.LBL].unique()
 
             with open(classes_fname, 'w') as f:
@@ -86,6 +86,7 @@ class SPCHABDataset(Dataset):
             self.classes = opt.classes = grab_classes(self.mode, df_unique=df_unique)
         else:
             # gets classes based off the train_data.info that is written during training
+            classes_fname = os.path.join(opt.model_dir, 'train_data.info')
             self.classes = opt.classes = grab_classes(self.mode, filename=classes_fname)
 
         self.num_class = opt.class_num = len(self.classes)

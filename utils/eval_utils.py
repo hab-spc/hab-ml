@@ -39,7 +39,7 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
         self.std = np.std(self.data)
 
-def print_eval(params, run_time, err, acc, results_dir):
+def print_eval(params, run_time, err, acc, results_dir, **kwargs):
     logger = logging.getLogger('print_eval')
     log = '[PARAMETERS] {params}'.format(params=params)
     logger.info(log)
@@ -51,6 +51,11 @@ def print_eval(params, run_time, err, acc, results_dir):
     log = '[FINAL] {name:<30} {acc:.7f}'.format(
         name='{}/{}'.format(opt.mode.upper(), 'accuracy'), acc=acc)
     logger.info(log)
+
+    for k,v in kwargs.items():
+        log = '[FINAL] {name:<30} {val}'.format(
+            name='{}/{}'.format(opt.mode.upper(), k), val=v)
+        logger.info(log)
     log = '[FIGS] {}'.format(results_dir)
     logger.info(log)
 
@@ -97,7 +102,12 @@ class EvalMetrics(object):
         ids = ids
         self.ids.extend(ids)
     
-    def compute_acc(self):
+    def compute_hab_acc(self):
+        self.num_class = 10
+        self.classes = self.le.hab_classes
+        self.gtruth = self.le.hab_transform2idx(self.gtruth)
+        self.predictions = self.le.hab_transform2idx(self.predictions)
+
         c=0
         for t, p in zip(self.gtruth, self.predictions):
             if t==p:
@@ -154,7 +164,9 @@ class EvalMetrics(object):
 
         plt.ylabel('True label')
         plt.xlabel('Predicted label')
-        plt.savefig(os.path.join(opt.model_dir, 'figs', str(opt.mode) + '_confusion.png'))
+        cm_fname = os.path.join(opt.model_dir, 'figs', os.path.basename(
+                opt.deploy_data).strip('.csv') + '_confusion.png')
+        plt.savefig(cm_fname)
         plt.show()
         
         #Store diagonal of the confusion matrix
@@ -164,7 +176,8 @@ class EvalMetrics(object):
         class_diag = self.classes.copy()
         class_diag = [x for _,x in sorted(zip(cm_diag,class_diag))]
         cm_diag.sort()
-        with open(os.path.join(opt.model_dir,'figs/confusion_diag.txt'), 'w') as the_file:
+        cm_diag_fname = cm_fname.replace('_confusion.png', '_confusion_diag.txt')
+        with open(cm_diag_fname, 'w') as the_file:
             for i in range(len(cm_diag)):
                 line = '{:>39}  {:>12}'.format(class_diag[i], str(cm_diag[i]))
                 the_file.write(line+'\n')
@@ -190,7 +203,7 @@ class EvalMetrics(object):
 
         # decode predictions
         pred_df[CONST.PRED] = self.le.inverse_transform(pred_df[CONST.PRED].values)
-        pred_df[CONST.HAB_PRED] = self.le.hab_transform(pred_df[CONST.PRED].values)
+        pred_df[CONST.HAB_PRED] = pred_df[CONST.PRED].apply(self.le.hab_map)
 
         # merge into original csv
         orig_df = pd.read_csv(opt.deploy_data)

@@ -380,19 +380,20 @@ def deploy(opt, logger=None):
         model=trainer.model, trainer=trainer, data_loader=data_loader,
         logger=logger, tb_logger=tb_logger)
 
+    dest_dir = opt.deploy_data + '_static_html' if opt.lab_config else opt.deploy_data
+    metrics.save_predictions(start_datetime, run_time.avg, opt.model_dir,
+                             dest_dir)
+
+    hab_acc = metrics.compute_hab_acc() if opt.hab_eval else 'NOT EVALUATED'
+
+    # plot confusion matrix
+    metrics.compute_cm(plot=True)
+
     Logger.section_break('DEPLOY COMPLETED')
     model_parameters = filter(lambda p: p.requires_grad,
                               trainer.model.parameters())
     params = sum([np.prod(p.size()) for p in model_parameters])
-    print_eval(params, run_time, err, acc, metrics.results_dir)
-
-    # plot confusion matrix
-    plt.figure()
-    metrics.compute_cm(plot=True)
-
-    dest_dir = opt.deploy_data + '_static_html' if opt.lab_config else opt.deploy_data
-    metrics.save_predictions(start_datetime, run_time.avg, opt.model_dir,
-                             dest_dir)
+    print_eval(params, run_time, err, acc, metrics.results_dir, hab_accuracy=hab_acc)
 
 
 if __name__ == '__main__':
@@ -509,7 +510,10 @@ if __name__ == '__main__':
             os.mkdir(os.path.join(opt.model_dir, 'figs'))
     
     # Initialize Logger
-    Logger(log_filename=os.path.join(opt.model_dir, '{}.log'.format(opt.mode)),
+    base = '' if opt.mode != CONST.DEPLOY else '-'+ os.path.basename(
+        opt.deploy_data).replace('.csv','')
+    log_fname = '{}{}.log'.format(opt.mode, base)
+    Logger(log_filename=os.path.join(opt.model_dir, log_fname),
                     level=opt.logging_level, log2file=opt.log2file)
     logger = logging.getLogger('go-train')
     Logger.section_break('User Config')
