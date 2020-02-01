@@ -39,7 +39,7 @@ from trainer import Trainer
 from data.dataloader import get_dataloader, to_cuda
 from utils.constants import Constants as CONST
 from utils.config import opt, set_config
-from utils.eval_utils import accuracy, get_meter, EvalMetrics, vis_training, print_eval
+from utils.eval_utils import accuracy, get_meter, EvalMetrics, vis_training
 from utils.logger import Logger
 from utils.model_sql import model_sql
 
@@ -160,9 +160,9 @@ def train_and_evaluate(opt, logger=None, tb_logger=None):
         model_parameters = filter(lambda p: p.requires_grad,
                                   trainer.model.parameters())
         params = sum([np.prod(p.size()) for p in model_parameters])
-        print_eval(params, run_time, err, acc, metrics.results_dir)
+        metrics.print_eval(params, run_time, err, acc, metrics.results_dir)
         
-        cm = metrics.compute_cm(plot=True)
+        cm, mca = metrics.compute_cm(plot=True)
     #==== END OPTION 2: EVALUATION ====#
 
 def train(model, trainer, train_loader, epoch, logger, tb_logger,
@@ -373,7 +373,7 @@ def deploy(opt, logger=None):
     trainer = Trainer(model=model, model_dir=opt.model_dir, mode=opt.mode,
                       resume=opt.resume)
 
-    # return predictions back to image_ids
+    # Run Predictions
     Logger.section_break('Deploy')
     logger.info('Starting deployment...')
     err, acc, run_time, metrics = evaluate(
@@ -384,23 +384,33 @@ def deploy(opt, logger=None):
     metrics.save_predictions(start_datetime, run_time.avg, opt.model_dir,
                              dest_dir)
 
+    # compute hab accuracy
     hab_acc = metrics.compute_hab_acc() if opt.hab_eval else 'NOT EVALUATED'
 
-    # plot confusion matrix
-    metrics.compute_cm(plot=True)
+    # plot confusion matrix and get mca
+    _, mca_acc = metrics.compute_cm(plot=True)
+
+    # plot roc curve
+    _, _, auc_score = metrics.compute_roc_auc_score(plot=True)
+
+    # plot precision recall curve
+    _, _, average_precision = metrics.compute_precision_recall_ap_score(plot=True)
 
     Logger.section_break('DEPLOY COMPLETED')
     model_parameters = filter(lambda p: p.requires_grad,
                               trainer.model.parameters())
     params = sum([np.prod(p.size()) for p in model_parameters])
-    print_eval(params, run_time, err, acc, metrics.results_dir, hab_accuracy=hab_acc)
+    metrics.print_eval(params, run_time, err, acc, metrics.results_dir,
+                       hab_accuracy=hab_acc,
+                       mean_class_accuracy=mca_acc,
+                       auc_score=auc_score['micro'],
+                       average_precision=average_precision['micro'])
 
 
 if __name__ == '__main__':
     
-    #TODO write out help description
     """Argument Parsing"""
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser("Harmful algae bloom CNN detection model")
     parser.add_argument('--mode', type=str, default=opt.mode)
     parser.add_argument('--interactive', action='store_true', dest=CONST.INTERACTIVE)
     parser.add_argument('--arch', type=str, default=opt.arch)
