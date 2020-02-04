@@ -12,12 +12,24 @@ import torchvision.transforms as transforms
 from PIL import Image
 # Project level imports
 from data.parse_data import DataParser
+from data.label_encoder import HABLblEncoder
 
 from utils.eval_utils import EvalMetrics
+from utils.constants import Constants as CONST
 
 
 class ReportGenerator(DataParser, EvalMetrics):
-    def __init__(self, csv_fname=None, json_fname=None, model_path=None, save=False):
+    def __init__(self, csv_fname=None, json_fname=None, model_path=None,
+                 hab_eval=True, save=False):
+        """Initializes ReportGenerator
+
+        Args:
+            csv_fname (str):
+            json_fname (str):
+            model_path (str):
+            hab_eval (bool):
+            save (bool):
+        """
         if csv_fname:
             self.csv_fname = csv_fname
             self.csv_data = pd.read_csv(csv_fname)
@@ -29,9 +41,12 @@ class ReportGenerator(DataParser, EvalMetrics):
             self.dataset = self.dataset.rename({'gtruth': 'label'}, axis=1)
 
         if csv_fname and json_fname:
-            self.dataset = self.merge_dataset(self.csv_data, self.json_data, ave=save)
+            self.dataset = self.merge_dataset(self.csv_data, self.json_data, save=save)
 
         if model_path:
+            # Gets all of the dataset statistics from the trained model directory
+            # and initializes them as attributes for usage throughout the script
+            # No handling atm if attributes are used without the model_path given
             train_fname = os.path.join(model_path, 'train_data.info')
             val_fname = os.path.join(model_path, 'val_data.info')
             self.model_path = model_path
@@ -39,6 +54,12 @@ class ReportGenerator(DataParser, EvalMetrics):
             self.cls_count_train, \
             self.cls_count_val = self.get_dataset_statistics(train_fname, val_fname)
             self.cls2idx, self.idx2cls = self.get_classes(self.class_list)
+
+            self.le = HABLblEncoder(classes_fname=train_fname)
+
+        # Initialize with prediction column to use given the hab_evaluation
+        self.hab_eval = hab_eval
+        self.pred_col = CONST.HAB_PRED if hab_eval else CONST.PRED
 
         # Get the hab species of interest for class filtering
         self.hab_species = open('/data6/phytoplankton-db/hab.txt', 'r').read().splitlines()
@@ -54,9 +75,13 @@ class ReportGenerator(DataParser, EvalMetrics):
         print('Totals\nTrain: {} | Validation: {}'.format(sum_train, sum_val))
         print('Dataset location:\n{}\n{}')
 
+    def show_testset_statistics(self):
+        gt = self.get_gtruth()
+        self._plot_dataset_distribution(data_dict=gt)
+
     def show_prediction_statistics(self):
-        gt = self.get_gtruth(decode=True)
-        pr = self.get_predictions(decode=True)
+        gt = self.get_gtruth()
+        pr = self.get_predictions()
         pr = {k:v for (k,v) in pr.items() if v > 0}
         clsses = sorted(list(set(list(pr.keys())).union(list(gt.keys()))))
         print('\n{0:*^80}'.format(' Predictions '))
@@ -65,6 +90,7 @@ class ReportGenerator(DataParser, EvalMetrics):
             print('{:2}. {:50} {:5}\t\t{:5}'.format(idx + 1, clss, gt[clss] if clss in gt else 0,
                                                     pr[clss] if clss in pr else 0))
 
+    # TO BE DEPRECATED
     def class_mapping(self, class_name):
         # If there are mismatch class names between pred and gtruth, modify this
         # input and output are strings
@@ -75,9 +101,9 @@ class ReportGenerator(DataParser, EvalMetrics):
         c = 0
         wrong_idx = []
         for index, row in self.dataset.iterrows():
-            a = self.idx2cls[float(row['label'])]
+            a = row[CONST.LBL]
             a = self.class_mapping(a)
-            b = self.idx2cls[float(row['pred'])]
+            b = row[self.pred_col]
             b = self.class_mapping(b)
             if a == b:
                 c += 1
@@ -89,10 +115,10 @@ class ReportGenerator(DataParser, EvalMetrics):
     # It show a single img given image index
     def show_img(self, plot_idx, idx, original_img_flag=True, data_transform_1_flag=False, print_img_info=True):
         row = self.dataset.iloc[idx]
-        img_path = row['image_id']
+        img_path = row[CONST.IMG]
 
-        pred = self.class_mapping(self.idx2cls[row['pred']])
-        gtruth = self.class_mapping(self.idx2cls[row['label']])
+        pred = self.class_mapping(row[self.pred_col])
+        gtruth = self.class_mapping(row[CONST.LBL])
 
         facecolor = 'red' if pred != gtruth else 'wheat'
 
@@ -148,9 +174,6 @@ class ReportGenerator(DataParser, EvalMetrics):
     # Can be used to combine with show_multi_img
     # EX: show_multi_img( get_column_value_idx('detritus','gtruth') )
     def get_column_value_idx(self, value, column_name):
-        for k, v in self.idx2cls.items():
-            if v == value:
-                value = k
         return self.dataset.index[self.dataset[column_name] == value].tolist()
 
     # Show multiple images given img index in self.data
@@ -168,43 +191,18 @@ class ReportGenerator(DataParser, EvalMetrics):
         plt.show()
 
     def show_misclassifications(self):
-        for cls_idx in sorted(self.dataset['label'].unique()):
-            print('\n{0:*^80}'.format(' {} '.format(self.idx2cls[cls_idx])))
-            self.show_multi_img(self.get_column_value_idx(self.idx2cls[cls_idx], 'label'))
+        """Show misclassifications"""
+        for cls in sorted(self.dataset[CONST.LBL].unique()):
+            print('\n{0:*^80}'.format(' {} '.format(cls)))
+            self.show_multi_img(self.get_column_value_idx(cls, CONST.LBL))
 
     #Show Test Confusion Matrix
     def show_confusion_matrix(self):
-        self.num_class = len(self.class_list)
-        self.gtruth = self.dataset['label'].tolist()
-        self.predictions = self.dataset['pred'].tolist()
-        self.compute_cm(self)
-
-    # Plot Test Confusion matrix
-    def _plot_confusion_matrix(self, cm, normalize=False, cmap=plt.cm.Blues):
-        if normalize:
-            cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-            title = "Normalized confusion matrix"
-        else:
-            title = 'Confusion matrix, without normalization'
-
-        plt.figure(figsize=(30, 30))
-        plt.imshow(cm, interpolation='nearest', cmap=cmap)
-        plt.title(title)
-        plt.colorbar()
-        tick_marks = np.arange(len(self.class_list))
-        plt.xticks(tick_marks, self.class_list, rotation=45)
-        plt.yticks(tick_marks, self.class_list)
-
-        fmt = '.2f'
-        thresh = cm.max() / 2.
-        for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
-            plt.text(j, i, format(cm[i, j], fmt),
-                     horizontalalignment="center",
-                     color="white" if cm[i, j] > thresh else "black")
-
-        plt.ylabel('True label')
-        plt.xlabel('Predicted label')
-        plt.show()
+        self.classes = self.le.hab_classes if self.hab_eval else self.class_list
+        self.num_class = len(self.classes)
+        self.gtruth = self.dataset[CONST.LBL].map(self.le.habcls2idx).tolist()
+        self.predictions = self.dataset[self.pred_col].map(self.le.habcls2idx).tolist()
+        self.compute_cm(plot=True, save=False)
 
     # Show Val Confusion Matrix
     def show_val_confusion_matrix(self):

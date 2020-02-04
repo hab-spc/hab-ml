@@ -9,11 +9,13 @@ import numpy as np
 import pandas as pd
 
 # Project level imports
+from utils.constants import Constants as CONST
 
 class DataParser(object):
     """Parse data"""
 
-    def __init__(self, csv_fname=None, json_fname=None, model_path=None, save=False):
+    def __init__(self, csv_fname=None, json_fname=None, model_path=None,
+                 hab_eval=True, save=False):
         """ Initializes SPCParsing instance to extract data from dataset
 
         Args:
@@ -44,6 +46,8 @@ class DataParser(object):
 
             self.cls2idx, self.idx2cls = self.get_classes(self.class_list)
 
+        self.pred_col = CONST.HAB_PRED if hab_eval else CONST.PRED
+
         # Get the hab species of interest for class filtering
         self.hab_species = open('/data6/phytoplankton-db/hab.txt', 'r').read().splitlines()
 
@@ -69,7 +73,7 @@ class DataParser(object):
         return merged
 
     #==== BEGIN: GETTER CALLS ===#
-    def get_gtruth(self, gtruth_col='label', verbose=False, decode=False):
+    def get_gtruth(self, gtruth_col=CONST.LBL, verbose=False, decode=False):
         """Get the gtruth distributions"""
         gtruth = self.dataset[gtruth_col]
         if self.idx2cls and decode:
@@ -80,8 +84,11 @@ class DataParser(object):
         self.gtruth = gtruth.value_counts().to_dict()
         return self.gtruth
 
-    def get_predictions(self, pred_col='pred', verbose=False, decode=False):
+    def get_predictions(self, pred_col=None, verbose=False, decode=False):
         """Get the prediction distribution"""
+        if pred_col is None:
+            pred_col = self.pred_col
+
         pred = self.dataset[pred_col]
         if self.idx2cls and decode:
             pred = self.dataset[pred_col].map(self.idx2cls)
@@ -173,7 +180,6 @@ class DataParser(object):
             class_name = class_name.strip()
             lbs_all_classes.append(class_name)
 
-        lbs_all_classes.sort()
         class_dct = {}
         c = 0
         for i in lbs_all_classes:
