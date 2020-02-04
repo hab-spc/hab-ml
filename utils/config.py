@@ -34,8 +34,9 @@ class Config:
     interactive = False
 
     # Data
-    data_dir = "../data/DB/{}"
-    classes_fname = "train_data.info"
+    data_dir = "/data6/lekevin/hab-master/hab_ml/data/DB/c34_workshop2019"
+    classes_fname = "/data6/lekevin/hab-master/hab_ml/experiments" \
+                    "/resnet18_pretrained_c34_workshop2019/train_data.info"
     #todo double check if hab_eval_classes used elsewhere
     hab_eval_classes = '/data6/phytoplankton-db/hab.txt'
     hab_eval_mapping = '/data6/phytoplankton-db/hab_mapping.csv'
@@ -43,16 +44,17 @@ class Config:
     hab_in_vitro_summer2019 = '/data6/phytoplankton-db/csv/hab_in_vitro_summer2019.csv'
 
     # Network
-    arch = 'resnet50'
-    model_dir = './experiments/'
+    arch = 'resnet34'
+    model_dir = '/data6/lekevin/hab-master/hab_ml/experiments' \
+                '/resnet18_pretrained_c34_workshop2019/'
     input_size = 224
 
     # Training hyperparameters
-    pretrained = False
+    pretrained = True
     lr = 0.001
-    epochs = 15
+    epochs = 60
     batch_size = 16
-    weighted_loss = True
+    weighted_loss = False
     freezed_layers = 0
 
     # Optimizer
@@ -95,7 +97,7 @@ class Config:
     # Deploy Hyperparameters
     lab_config = False
     deploy_data = None
-    hab_eval = False
+    hab_eval = True
     
     # Dataloader
     classes = None
