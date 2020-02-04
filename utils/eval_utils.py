@@ -103,7 +103,7 @@ class EvalMetrics(object):
                 c+=1
         return c/len(self.gtruth)*100
 
-    def compute_cm(self, plot=False):
+    def compute_cm(self, plot=False, save=True):
         # Create array for confusion matrix with dimensions based on number of classes
         confusion_matrix_rawcount = np.zeros((self.num_class, self.num_class))
         class_count = np.zeros(
@@ -121,7 +121,7 @@ class EvalMetrics(object):
         confusion_matrix_rate = np.around(confusion_matrix_rate, decimals=4)
 
         if plot:
-            self._plot_confusion_matrix(confusion_matrix_rate)
+            self._plot_confusion_matrix(confusion_matrix_rate, save=save)
         return confusion_matrix_rate, np.nanmean(np.diag(confusion_matrix_rate))
 
     def compute_roc_auc_score(self, plot=True):
@@ -199,7 +199,7 @@ class EvalMetrics(object):
 
         return precision, recall, average_precision
 
-    def _plot_confusion_matrix(self, cm, cmap=plt.cm.Blues):
+    def _plot_confusion_matrix(self, cm, cmap=plt.cm.Blues, save=False):
         plt.figure(figsize=(20,10))
         plt.subplot(1,2,1)
         plt.imshow(cm, interpolation='nearest', cmap=cmap)
@@ -237,8 +237,9 @@ class EvalMetrics(object):
             ax.text(width + 5, rect.get_y() + rect.get_height() / 2, format(label, fmt),
                     ha='center', va='bottom')
 
-        cm_fname = os.path.join(opt.model_dir, 'figs', self.pre + '_confusion.png')
-        plt.savefig(cm_fname)
+        if save:
+            cm_fname = os.path.join(opt.model_dir, 'figs', self.pre + '_confusion.png')
+            plt.savefig(cm_fname)
         plt.show()
 
     def _plot_roc_curve(self, fpr, tpr, roc_auc):
@@ -361,6 +362,30 @@ class EvalMetrics(object):
                                           target_names=self.le.hab_classes))
         logger.info(log)
 
+    def _plot_dataset_distribution(self, data_dict):
+        labels = list(data_dict.keys())
+        sizes = list(data_dict.values())
+        num_samples = range(len(labels))
+        colors = random.sample(plt_colors.cnames.keys(), k=len(labels))
+        plt.figure(figsize=(20,8))
+        plt.subplot(1,2,1)
+        bars = plt.bar(num_samples, sizes)
+        plt.xlabel('Classes')
+        plt.ylabel('Number of Images')
+        plt.xticks(num_samples, labels, rotation=20, fontsize=12)
+
+        for rect in bars:
+            height = rect.get_height()
+            plt.text(rect.get_x() + rect.get_width() / 2.0, height, '%d' % int(height),
+                     ha='center', va='bottom', fontsize=14)
+
+        plt.subplot(1,2,2)
+        plt.pie(sizes, labels=labels, colors=colors,
+                autopct='%1.1f%%', shadow=True, startangle=140, textprops={'fontsize':
+                                                                               14})
+        plt.axis('equal')
+        plt.tight_layout()
+        plt.show()
 
 def vis_training(train_points, val_points, num_epochs=0, loss=True, **kwargs):
     """ Visualize losses and accuracies w.r.t each epoch
