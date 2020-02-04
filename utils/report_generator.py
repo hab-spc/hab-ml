@@ -21,6 +21,15 @@ from utils.constants import Constants as CONST
 class ReportGenerator(DataParser, EvalMetrics):
     def __init__(self, csv_fname=None, json_fname=None, model_path=None,
                  hab_eval=True, save=False):
+        """Initializes ReportGenerator
+
+        Args:
+            csv_fname (str):
+            json_fname (str):
+            model_path (str):
+            hab_eval (bool):
+            save (bool):
+        """
         if csv_fname:
             self.csv_fname = csv_fname
             self.csv_data = pd.read_csv(csv_fname)
@@ -32,9 +41,12 @@ class ReportGenerator(DataParser, EvalMetrics):
             self.dataset = self.dataset.rename({'gtruth': 'label'}, axis=1)
 
         if csv_fname and json_fname:
-            self.dataset = self.merge_dataset(self.csv_data, self.json_data, ave=save)
+            self.dataset = self.merge_dataset(self.csv_data, self.json_data, save=save)
 
         if model_path:
+            # Gets all of the dataset statistics from the trained model directory
+            # and initializes them as attributes for usage throughout the script
+            # No handling atm if attributes are used without the model_path given
             train_fname = os.path.join(model_path, 'train_data.info')
             val_fname = os.path.join(model_path, 'val_data.info')
             self.model_path = model_path
@@ -45,6 +57,7 @@ class ReportGenerator(DataParser, EvalMetrics):
 
             self.le = HABLblEncoder(classes_fname=train_fname)
 
+        # Initialize with prediction column to use given the hab_evaluation
         self.hab_eval = hab_eval
         self.pred_col = CONST.HAB_PRED if hab_eval else CONST.PRED
 
@@ -77,6 +90,7 @@ class ReportGenerator(DataParser, EvalMetrics):
             print('{:2}. {:50} {:5}\t\t{:5}'.format(idx + 1, clss, gt[clss] if clss in gt else 0,
                                                     pr[clss] if clss in pr else 0))
 
+    # TO BE DEPRECATED
     def class_mapping(self, class_name):
         # If there are mismatch class names between pred and gtruth, modify this
         # input and output are strings
@@ -177,6 +191,7 @@ class ReportGenerator(DataParser, EvalMetrics):
         plt.show()
 
     def show_misclassifications(self):
+        """Show misclassifications"""
         for cls in sorted(self.dataset[CONST.LBL].unique()):
             print('\n{0:*^80}'.format(' {} '.format(cls)))
             self.show_multi_img(self.get_column_value_idx(cls, CONST.LBL))

@@ -56,28 +56,54 @@ def accuracy(predictions, targets, axis=1):
     return acc
 
 class EvalMetrics(object):
+    """ Evaluation metrics object to compute and plot basic metrics"""
     def __init__(self, classes, predictions=[], gtruth=[], ids=[], model_dir=''):
+        """Initializes EvalMetrics
+
+        Args:
+            classes (list): List of unique classes
+            predictions (list): List of predictions in the form of indices or strings
+            gtruth (list): List of gtruth in the form of indices or strings
+            ids (list): List of image identifiers
+            model_dir (str): Abs path to the model directory for saving results
+        """
+        # Initialize passed arguments
         self.num_class = len(classes)
         self.classes = classes
         self.predictions = predictions
         self.gtruth = gtruth
         self.ids = ids
 
+        # Initialize basename of the file as `pre` and create figs directory
         self.pre = None
         self.results_dir = os.path.join(model_dir, 'figs')
         if not os.path.exists(self.results_dir):
             os.makedirs(self.results_dir)
 
+        # Initialization for probabilities
         self.probabilities = []
         self.softmax = nn.Softmax(dim=1)
 
+        # Initialize encoder for transforming labels into HAB labels
         self.le = HABLblEncoder()
 
+        # Initialize set color for each class when plotting
         self.colors = None
 
         self.logger = logging.getLogger(__name__)
 
     def update(self, predictions, targets, ids, axis=1):
+        """Update predictions and gtruth that are retrieved from training/eval loop
+
+        Args:
+            predictions (cuda): Batched predictions
+            targets (cuda): Batched gtruth labels
+            ids (cuda): Batched image identifiers
+            axis (int): Axis to max predictions by
+
+        Returns:
+
+        """
         probs = self.softmax(predictions).detach().data.cpu().numpy()
         self.probabilities.extend(probs)
         
@@ -92,6 +118,15 @@ class EvalMetrics(object):
         self.ids.extend(ids)
     
     def compute_hab_acc(self):
+        """ Compute HAB Accuracy
+
+        Assumes that the classes are not already mapped to HAB class indices and
+        transforms them into indices. This also initializes the gtruth, predictions,
+        etc. for the rest of the evaluation processing in a hab_eval form.
+
+        Returns:
+
+        """
         self.num_class = 10
         self.classes = self.le.hab_classes
         self.gtruth = self.le.hab_transform2idx(self.gtruth)
@@ -200,6 +235,7 @@ class EvalMetrics(object):
         return precision, recall, average_precision
 
     def _plot_confusion_matrix(self, cm, cmap=plt.cm.Blues, save=False):
+        """Plot the confusion matrix and diagonal class accuracies"""
         plt.figure(figsize=(20,10))
         plt.subplot(1,2,1)
         plt.imshow(cm, interpolation='nearest', cmap=cmap)
@@ -243,6 +279,7 @@ class EvalMetrics(object):
         plt.show()
 
     def _plot_roc_curve(self, fpr, tpr, roc_auc):
+        """Plot the ROC Curve"""
         plt.figure(figsize=(20,15))
         lw = 2
 
@@ -275,6 +312,7 @@ class EvalMetrics(object):
         plt.show()
 
     def _plot_precision_recall_curve(self, recall, precision, average_precision):
+        """Plot the Precision-Recall Curve"""
         plt.figure(figsize=(20,15))
         f_scores = np.linspace(0.2, 0.8, num=4)
         lines = []
@@ -340,6 +378,19 @@ class EvalMetrics(object):
         self.logger.info('Predictions saved to {}'.format(csv_fname))
 
     def print_eval(self, params, run_time, err, acc, results_dir, **kwargs):
+        """Print evaluation metrics to log file
+
+        Args:
+            params (float): Model parameters
+            run_time (float): Run time
+            err (float): Loss
+            acc (float): Accuracy
+            results_dir (str): Abs path to the results directory
+            **kwargs: Keyword arguments
+
+        Returns:
+
+        """
         logger = logging.getLogger('print_eval')
         log = '[PARAMETERS] {params}'.format(params=params)
         logger.info(log)
@@ -352,21 +403,28 @@ class EvalMetrics(object):
             name='{}/{}'.format(opt.mode.upper(), 'accuracy'), acc=acc)
         logger.info(log)
 
+        # Log any other given keyword arguments
         for k, v in kwargs.items():
             log = '[FINAL] {name:<30} {val}'.format(
                 name='{}/{}'.format(opt.mode.upper(), k), val=v)
             logger.info(log)
         log = '[FIGS] {}'.format(results_dir)
 
+        # Compute classification report
         logger.info(metrics.classification_report(self.gtruth, self.predictions,
                                           target_names=self.le.hab_classes))
         logger.info(log)
 
     def _plot_dataset_distribution(self, data_dict):
+        """Plot dataset distribution in the form of raw counts and normalized counts"""
+        # Grab data from dictionary
         labels = list(data_dict.keys())
         sizes = list(data_dict.values())
         num_samples = range(len(labels))
-        colors = random.sample(plt_colors.cnames.keys(), k=len(labels))
+        if self.colors == None:
+            self.colors = random.sample(plt_colors.cnames.keys(), k=len(labels))
+
+        # Generate plot
         plt.figure(figsize=(20,8))
         plt.subplot(1,2,1)
         bars = plt.bar(num_samples, sizes)
@@ -374,13 +432,15 @@ class EvalMetrics(object):
         plt.ylabel('Number of Images')
         plt.xticks(num_samples, labels, rotation=20, fontsize=12)
 
+        # Assign text to top of bars
         for rect in bars:
             height = rect.get_height()
             plt.text(rect.get_x() + rect.get_width() / 2.0, height, '%d' % int(height),
                      ha='center', va='bottom', fontsize=14)
 
+        # Plot Pie chart of the distribution
         plt.subplot(1,2,2)
-        plt.pie(sizes, labels=labels, colors=colors,
+        plt.pie(sizes, labels=labels, colors=self.colors,
                 autopct='%1.1f%%', shadow=True, startangle=140, textprops={'fontsize':
                                                                                14})
         plt.axis('equal')
@@ -439,6 +499,7 @@ def get_cmap(n, name='hsv'):
     return plt.cm.get_cmap(name, n)
 
 def binarize_scores(gtruth, predictions, num_class):
+    """One hotencode gtruth and predictions"""
     from sklearn import preprocessing
     gtruth = np.asarray(gtruth).reshape(-1, 1)
     predictions = np.asarray(predictions).reshape(-1, 1)
