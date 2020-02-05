@@ -7,3 +7,5 @@ scikit-learn
 scikit-image
 pytorch
 torchvision
+tensorboardx
+
