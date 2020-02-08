@@ -26,7 +26,7 @@ class DataParser(object):
         """
         if csv_fname:
             self.csv_fname = csv_fname
-            self.csv_data = pd.read_csv(csv_fname)
+            self.csv_data = self.read_csv_dataset(csv_fname)
             self.dataset = self.csv_data.copy()
 
         if json_fname:
@@ -44,12 +44,23 @@ class DataParser(object):
             self.cls_count_train, \
             self.cls_count_val = self.get_dataset_statistics(train_fname, val_fname)
 
-            self.cls2idx, self.idx2cls = self.get_classes(self.class_list)
+            self.cls2idx, self.idx2cls = self.set_encode_decode(self.class_list)
 
         self.pred_col = CONST.HAB_PRED if hab_eval else CONST.PRED
 
         # Get the hab species of interest for class filtering
         self.hab_species = open('/data6/phytoplankton-db/hab.txt', 'r').read().splitlines()
+
+    def read_csv_dataset(self, csv_file, verbose=False):
+        df = pd.read_csv(csv_file)
+        if verbose:
+            print('\n{0:*^80}'.format(' Reading in the dataset '))
+            print("\nit has {0} rows and {1} columns".format(*df.shape))
+            print('\n{0:*^80}\n'.format(' It has the following columns '))
+            print(df.info())
+            print('\n{0:*^80}\n'.format(' The first 5 rows look like this '))
+            print(df.head())
+        return df
 
     def merge_dataset(self, csv_data, json_data, save=False):
         # Drop outdated `label` column (used as gtruth in machine learning exp)
@@ -111,7 +122,13 @@ class DataParser(object):
         _, images_per_class_val = DataParser._parse_info_file(val_fname)
         return class_list, images_per_class_train, images_per_class_val
 
-    def get_classes(self, class_list):
+    def get_classes(self, data):
+        df = data.copy()
+        classes = df[CONST.LBL].unique()
+        num_class = len(classes)
+        return classes, num_class
+
+    def set_encode_decode(self, class_list):
         """Set class2idx, idx2class encoding/decoding dictionaries"""
         cls2idx = {i: idx for idx, i in enumerate(sorted(class_list))}
         idx2cls = {idx: i for idx, i in enumerate(sorted(class_list))}

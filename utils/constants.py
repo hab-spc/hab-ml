@@ -62,6 +62,9 @@ class Constants():
     PROB = pre + 'probability'
     PRED_TSTAMP = pre + 'prediction_timestamp'
 
+    PIER = 'pier'
+    LAB = 'lab'
+
 """TO BE DEPRECATED"""
 class SPCConstants():
     USR_LBL = 'user_labels'

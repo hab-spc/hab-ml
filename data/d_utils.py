@@ -2,11 +2,13 @@
 import logging
 import sys
 # Standard dist imports
+import os
 
 # Third party imports
 import numpy as np
 import pandas as pd
 import torch
+from torch.autograd import Variable
 from PIL import Image
 
 # Project level imports
@@ -56,6 +58,14 @@ def rgb_preproc(img):
     img = (2. * img[:, :, :3] / 255. - 1).astype(np.float32)
     return img
 
+def compute_padding(img_size):
+    img_padding = [0, 0]
+    if img_size[0] > img_size[1]:
+        img_padding[1] = int((img_size[0] - img_size[1]) / 2)
+    else:
+        img_padding[0] = int((img_size[1] - img_size[0]) / 2)
+    img_padding = tuple(img_padding)
+    return img_padding
 
 def inverse_normalize():
     """#TODO Write function to un-normalize image to visualize
@@ -66,6 +76,71 @@ def inverse_normalize():
     """
     pass
 
+def get_dataset_mean_and_std(csv_file=None, mean_std_json=None):
+    from data.coral_dataloader import Coral_SPCHABDataset
+    import torch.utils.data as data
+    from torchvision import transforms
+    import json
+
+    logger = logging.getLogger(__name__)
+    logger.setLevel(opt.logging_level)
+
+    mean_std_json = mean_std_json if mean_std_json != None else opt.mean_std_json
+    if os.path.exists(mean_std_json):
+        logger.debug('Retrieving mean & std json file...')
+        mean_std = json.load(open(mean_std_json, 'r'))
+    else:
+        logger.debug('Computing mean & std of dataset...')
+        transform = transforms.Compose([
+            transforms.ToTensor()
+        ])
+
+        dataset = Coral_SPCHABDataset(csv_file=csv_file, transforms=transform)
+        data_loader = torch.utils.data.DataLoader(dataset)
+
+        mean_std = compute_mean_std(data_loader)
+
+    return mean_std
+
+def compute_mean_std(data_loader):
+    mean = [0, 0, 0]
+    std = [0, 0, 0]
+    for channel in range(3):
+        _mean = 0
+        _std = 0
+        for i, batch in enumerate(data_loader):
+            img = batch[CONST.IMG][0][channel].numpy()
+            _mean += img.mean()
+            _std += img.std()
+
+        mean[channel] = _mean/len(data_loader.dataset)
+        std[channel] = _std/len(data_loader.dataset)
+    return mean, std
+
+def to_cuda(item, computing_device, label=False):
+    """ Typecast item to cuda()
+
+    Wrapper function for typecasting variables to cuda() to allow for
+    flexibility between different types of variables (i.e. long, float)
+
+    Loss function usually expects LongTensor type for labels, which is why
+    label is defined as a bool.
+
+    Computing device is usually defined in the Trainer()
+
+    Args:
+        item: Desired item. No specific type
+        computing_device (str): Desired computing device.
+        label (bool): Flag to convert item to long() or float()
+
+    Returns:
+        item
+    """
+    if label:
+        item = Variable(item.to(computing_device)).long()
+    else:
+        item = Variable(item.to(computing_device)).float()
+    return item
 
 def grab_classes(mode, df_unique=None, filename=None):
     """
@@ -106,6 +181,7 @@ def parse_classes(filename):
         class_name = class_name.strip()
         lbs_all_classes.append(class_name)
     return lbs_all_classes
+
 
 def get_mapping_dict(mapping_csv=None, original_label_col='Original Label',
                      mapped_label_col='New Label'):

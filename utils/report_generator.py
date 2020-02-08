@@ -53,9 +53,8 @@ class ReportGenerator(DataParser, EvalMetrics):
             self.class_list, \
             self.cls_count_train, \
             self.cls_count_val = self.get_dataset_statistics(train_fname, val_fname)
-            self.cls2idx, self.idx2cls = self.get_classes(self.class_list)
-
-            self.le = HABLblEncoder(classes_fname=train_fname)
+            self.cls2idx, self.idx2cls = self.set_encode_decode(self.class_list)
+            self.le = HABLblEncoder(model_dir=model_path)
 
         # Initialize with prediction column to use given the hab_evaluation
         self.hab_eval = hab_eval

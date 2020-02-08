@@ -48,6 +48,10 @@ class AverageMeter(object):
 def get_meter(meters=['batch_time', 'loss', 'acc']):
     return {meter_type: AverageMeter() for meter_type in meters}
 
+def update_meter(meter, scores):
+    for k, v in scores._asdict().items():
+        meter[k].update(v)
+
 def accuracy(predictions, targets, axis=1):
     batch_size = predictions.size(0)
     predictions = predictions.max(axis)[1].type_as(targets)
@@ -86,6 +90,8 @@ class EvalMetrics(object):
 
         # Initialize encoder for transforming labels into HAB labels
         self.le = HABLblEncoder()
+        self.classes, self.num_class =self.le.grab_classes()
+        self.le.fit(self.classes)
 
         # Initialize set color for each class when plotting
         self.colors = None

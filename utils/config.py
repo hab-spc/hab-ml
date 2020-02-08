@@ -30,11 +30,12 @@ class Config:
     """
 
     # Mode
-    mode = CONST.TRAIN
+    mode = CONST.DEPLOY
     interactive = False
 
     # Data
-    data_dir = "../data/DB/{}"
+    data_dir = "data/DB/coral_c34_workshop2019"
+    mean_std_json = os.path.join(data_dir, 'mean_std.json')
     classes_fname = "train_data.info"
     #todo double check if hab_eval_classes used elsewhere
     hab_eval_classes = '/data6/phytoplankton-db/hab.txt'
@@ -44,24 +45,28 @@ class Config:
 
     # Network
     arch = 'resnet50'
-    model_dir = './experiments/'
+    # model_dir = './experiments/alexnet_coral_c34_workshop2019/'
+    model_dir = './experiments/default/'
     input_size = 224
 
     # Training hyperparameters
-    pretrained = False
+    pretrained = True
     lr = 0.001
-    epochs = 15
-    batch_size = 16
+    momentum = 0.9
+    epochs = 30
+    batch_size = 128
     weighted_loss = True
     freezed_layers = 0
+    lambda_coral = 0.5
 
     # Optimizer
-    use_adam = True
+    use_adam = False
     use_rmsprop = False
     use_adagrad = False
 
     # Pytorch
-    gpu = '0'
+    gpu = '3'
+    SEED = 123
     os.environ["CUDA_VISIBLE_DEVICES"] = gpu
     if gpu != None:
         num_workers = 8
@@ -72,13 +77,13 @@ class Config:
 
     # Training flags
     resume = False
-    print_freq = 50
+    print_freq = 1
     save_freq = 20
     early_stop = True
     estop_threshold = 3
     log2file = False
     save_model_db = False
-    logging_level = 20 # logging.INFO = 20, loggin.DEBUG = 10
+    logging_level = 10 # logging.INFO = 20, loggin.DEBUG = 10
 
     #model sql
     model_sql_db = '/data6/plankton_test_db_new/model/'
@@ -87,15 +92,15 @@ class Config:
     sql_weight_path = ''
     train_acc = 0
     test_acc = 0
-    class_num = 2
+    class_num = 30
     add_comm = ''
     sql_log_path = ''
     freezed_layers = 0
     
     # Deploy Hyperparameters
     lab_config = False
-    deploy_data = None
-    hab_eval = False
+    deploy_data = 'data/DB/csv/hab_in_vitro_20190530.csv'
+    hab_eval = True
     
     # Dataloader
     classes = None

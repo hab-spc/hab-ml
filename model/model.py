@@ -76,6 +76,7 @@ class HABClassifier(nn.Module):
 
         return feature_extractor, classifier
 
+
 if __name__ == '__main__':
     import torch
 

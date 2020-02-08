@@ -31,7 +31,7 @@ OTHER_LBL = 'other'
 class DatasetGenerator(object):
     def __init__(self, csv_file, data_dir, labels=None, dates=None, pier=None, lab=None):
         # Initialize main data directory to save data
-        self.data_dir = os.path.join(opt.data_dir.format(data_dir))
+        self.data_dir = data_dir
 
         # Read in the dataset from the csv file
         try:
