@@ -11,8 +11,11 @@ and fine tuned for this task.
 ## Our task
 The specific task here is to identify a harmful algae species at the species taxonomy level, i.e. given an image, return the predicted species classification.
 
-### Getting Started
+### Experiment
+The following method is used to generate a pretrain weight for our model. 
+1. Unsupervised Feature Learning via Non-parameteric Instance Discrimination. [(arxiv)](https://arxiv.org/pdf/1805.01978.pdf) [(submodule code)](https://github.com/zhirongw/lemniscate.pytorch) This is done in <code>main_instance.py</code>.
 
+### Getting Started
 The approach here is to add a classifier on top of the pre-trained CNN model and fine tune the model parameters by training on our domain specific data, i.e., phytoplankton images.
 This is done in <code>main.py</code>.
 

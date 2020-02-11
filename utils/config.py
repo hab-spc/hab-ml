@@ -56,7 +56,7 @@ class Config:
     freezed_layers = 0
 
     # Optimizer
-    use_adam = True
+    use_adam = False
     use_rmsprop = False
     use_adagrad = False
 
@@ -96,6 +96,13 @@ class Config:
     lab_config = False
     deploy_data = None
     hab_eval = False
+    
+    #instance nce Hyperparameters
+    ndata = 0
+    low_dim = 128
+    nce_k = 4096
+    nce_t = 0.1
+    nce_m = 0.5
     
     # Dataloader
     classes = None

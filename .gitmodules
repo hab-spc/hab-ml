@@ -5,3 +5,6 @@
 [submodule "utils/hab-mlviewer"]
 	path = utils/hab-mlviewer
 	url = https://github.com/janAntu/hab-mlviewer.git
+[submodule "lemniscate"]
+	path = lemniscate
+	url = https://github.com/zhirongw/lemniscate.pytorch

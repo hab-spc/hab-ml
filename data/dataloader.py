@@ -113,6 +113,9 @@ class SPCHABDataset(Dataset):
                                               # transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
                                               ])
         }
+        
+        #number of images
+        opt.ndata = len(self.data)
 
 
     def __len__(self):
@@ -160,7 +163,7 @@ class SPCHABDataset(Dataset):
             else:
                 id = 0
 
-        return {SPC_CONST.IMG: img, SPC_CONST.LBL: target, SPC_CONST.ID: id}
+        return {SPC_CONST.IMG: img, SPC_CONST.LBL: target, SPC_CONST.ID: id, 'INDEX': index}
     
     def encode_labels(self, label):
         """ Encode labels given the enumerated class index
