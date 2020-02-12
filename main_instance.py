@@ -31,6 +31,7 @@ from tensorboardX import SummaryWriter
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
+from torch.autograd import Variable
 
 # Project level imports
 from model import resnet_instance
@@ -44,11 +45,11 @@ from utils.logger import Logger
 from utils.model_sql import model_sql
 
 # Import lib and test from lemnicate submodule
-from lemnicate.lib.NCEAverage import NCEAverage
-from lemnicate.lib.LinearAverage import LinearAverage
-from lemnicate.lib.NCECriterion import NCECriterion
-from lemnicate.lib.utils import AverageMeter
-from lemnicate.test import NN, kNN
+from lemniscate.lib.NCEAverage import NCEAverage
+from lemniscate.lib.LinearAverage import LinearAverage
+from lemniscate.lib.NCECriterion import NCECriterion
+from lemniscate.lib.utils import AverageMeter
+from lemniscate.test import NN, kNN
 
 # Module level constants
 
@@ -103,10 +104,10 @@ def train_and_evaluate(opt, logger=None, tb_logger=None):
     # if the mode is not training.
     if opt.mode == CONST.TRAIN:
         best_err = trainer.best_err
-        Logger.section_break('Valid (Epoch {})'.format(trainer.start_epoch))
-        acc = evaluate(model=trainer.model, trainer=trainer, train_loader=data_loader[CONST.TRAIN], 
-                val_loader=data_loader[CONST.VAL], logger=logger, tb_logger=tb_logger)
-        best_err = min(best_err, acc)
+#         Logger.section_break('Valid (Epoch {})'.format(trainer.start_epoch))
+#         acc = evaluate(model=trainer.model, trainer=trainer, train_loader=data_loader[CONST.TRAIN], 
+#                 val_loader=data_loader[CONST.VAL], logger=logger, tb_logger=tb_logger)
+#         best_err = max(best_err, acc)
         
         eps_meter = get_meter(meters=['train_loss', 'val_acc'])
         
@@ -121,15 +122,14 @@ def train_and_evaluate(opt, logger=None, tb_logger=None):
             
             # VAL
             Logger.section_break('VAL (Epoch {})'.format(epoch))
-            acc = evaluate(
-            model=trainer.model, trainer=trainer, train_loader=data_loader[CONST.TRAIN], 
+            acc = evaluate(model=trainer.model, trainer=trainer, train_loader=data_loader[CONST.TRAIN], 
                 val_loader=data_loader[CONST.VAL], logger=logger, tb_logger=tb_logger)
             
-            eps_meter['val_acc'].update(val_acc)
+            eps_meter['val_acc'].update(acc)
                 
             # Remember best error and save checkpoint
-            is_best = acc < best_err
-            best_err = min(err, best_err)
+            is_best = acc > best_err
+            best_err = max(acc, best_err)
             state = trainer.generate_state_dict(epoch=epoch, best_err=best_err)
 
             if epoch % opt.save_freq == 0:
@@ -187,6 +187,7 @@ def train(model, trainer, train_loader, epoch, logger, tb_logger,
     lemniscate = trainer.lemniscate
     
     # adjust lr (implmentation detail from lemniscate)
+    lr = opt.lr
     if epoch >= 80:
         lr = opt.lr * (0.1 ** ((epoch-80) // 40))
     for param_group in optimizer.param_groups:
@@ -201,9 +202,11 @@ def train(model, trainer, train_loader, epoch, logger, tb_logger,
     end = time.time()
     for i, batch in enumerate(train_loader):
         # process batch items: images, labels
-        img = to_cuda(batch[CONST.IMG], trainer.computing_device)
-        index = to_cuda(batch['INDEX'], trainer.computing_device)
+        img = Variable(to_cuda(batch[CONST.IMG], trainer.computing_device))
+        index = Variable(to_cuda(batch['INDEX'], trainer.computing_device, label=True))
         id = batch[CONST.ID]
+        
+        optimizer.zero_grad()
 
         # measure data loading time
         meter['data_time'].update(time.time() - end)
@@ -218,7 +221,6 @@ def train(model, trainer, train_loader, epoch, logger, tb_logger,
         meter['loss'].update(loss, batch_size)
         
         # compute gradient and do sgd step
-        optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
@@ -279,9 +281,10 @@ def evaluate(model, trainer, train_loader, val_loader, epoch=0,
     lemniscate = trainer.lemniscate
     end = time.time()
     acc = kNN(epoch, model, lemniscate, train_loader, val_loader, 200, opt.nce_t, 0)
+    acc = acc * 100
     log = 'EVAL [{:02d}] TIME {:10} ACC {:10}'.\
-        format(epoch, i, "{t.val:.3f} ({t.avg:.3f})".format(t=time.time()-end),
-                "{t.val:.3f} ({t.avg:.3f})".format(t=acc)
+        format(epoch, "{t:.3f}".format(t=time.time()-end),
+                "{t:.3f}".format(t=acc)
             )
     logger.info(log)
     

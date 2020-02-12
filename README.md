@@ -14,6 +14,7 @@ The specific task here is to identify a harmful algae species at the species tax
 ### Experiment
 The following method is used to generate a pretrain weight for our model. 
 1. Unsupervised Feature Learning via Non-parameteric Instance Discrimination. [(arxiv)](https://arxiv.org/pdf/1805.01978.pdf) [(submodule code)](https://github.com/zhirongw/lemniscate.pytorch) This is done in <code>main_instance.py</code>.
+    * Replace lemniscate/test.py with ./test.py.
 
 ### Getting Started
 The approach here is to add a classifier on top of the pre-trained CNN model and fine tune the model parameters by training on our domain specific data, i.e., phytoplankton images.

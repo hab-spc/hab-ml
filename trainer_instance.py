@@ -17,11 +17,11 @@ from utils.eval_utils import get_meter
 from utils.model_sql import model_sql
 
 # Import lib and test from lemnicate submodule
-from lemnicate.lib.NCEAverage import NCEAverage
-from lemnicate.lib.LinearAverage import LinearAverage
-from lemnicate.lib.NCECriterion import NCECriterion
-from lemnicate.lib.utils import AverageMeter
-from lemnicate.test import NN, kNN
+from lemniscate.lib.NCEAverage import NCEAverage
+from lemniscate.lib.LinearAverage import LinearAverage
+from lemniscate.lib.NCECriterion import NCECriterion
+from lemniscate.lib.utils import AverageMeter
+from lemniscate.test import NN, kNN
 
 # Module level constants
 
@@ -55,7 +55,7 @@ class Trainer(object):
         if not os.path.isdir(self.model_dir):
             os.makedirs(self.model_dir)
         self.start_epoch = 0
-        self.best_err = np.inf
+        self.best_err = 0
 
         self.optimizer = self._get_optimizer(lr=lr)
         
@@ -69,6 +69,9 @@ class Trainer(object):
             self.criterion = NCECriterion(opt.ndata)
         else:
             self.criterion = nn.CrossEntropyLoss()
+            
+        self.lemniscate = self.lemniscate.cuda()
+        self.criterion = self.criterion.cuda()
             
         # meter
         self.meter = {CONST.TRAIN: get_meter(), CONST.VAL: get_meter()}

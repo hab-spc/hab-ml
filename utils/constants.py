@@ -61,6 +61,12 @@ class Constants():
     HAB_PRED = pre + 'hab_prediction'
     PROB = pre + 'probability'
     PRED_TSTAMP = pre + 'prediction_timestamp'
+    
+    # Instance NCE
+    LOW_DIM = 'low_dim'
+    NCE_K = 'nce_k'
+    NCE_T = 'nce_t'
+    NCE_M = 'nce_m'
 
 """TO BE DEPRECATED"""
 class SPCConstants():

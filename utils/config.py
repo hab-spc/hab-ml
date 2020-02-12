@@ -52,7 +52,7 @@ class Config:
     lr = 0.001
     epochs = 15
     batch_size = 16
-    weighted_loss = True
+    weighted_loss = False
     freezed_layers = 0
 
     # Optimizer
