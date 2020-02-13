@@ -118,6 +118,9 @@ class SPCHABDataset(Dataset):
         if mode == CONST.TRAIN:
             opt.ndata = len(self.data)
             self.logger.info('Total Number of Images: '+str(opt.ndata))
+        if mode == CONST.VAL:
+            opt.ndata_val = len(self.data)
+            self.logger.info('Total Number of Images: '+str(opt.ndata_val))
 
 
     def __len__(self):

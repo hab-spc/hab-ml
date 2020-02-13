@@ -99,6 +99,7 @@ class Config:
     
     #instance nce Hyperparameters
     ndata = 0
+    ndata_val = 0
     low_dim = 128
     nce_k = 4096
     nce_t = 0.1

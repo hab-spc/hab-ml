@@ -104,10 +104,10 @@ def train_and_evaluate(opt, logger=None, tb_logger=None):
     # if the mode is not training.
     if opt.mode == CONST.TRAIN:
         best_err = trainer.best_err
-#         Logger.section_break('Valid (Epoch {})'.format(trainer.start_epoch))
-#         acc = evaluate(model=trainer.model, trainer=trainer, train_loader=data_loader[CONST.TRAIN], 
-#                 val_loader=data_loader[CONST.VAL], logger=logger, tb_logger=tb_logger)
-#         best_err = max(best_err, acc)
+        Logger.section_break('Valid (Epoch {})'.format(trainer.start_epoch))
+        acc = evaluate(model=trainer.model, trainer=trainer, train_loader=data_loader[CONST.TRAIN], 
+                val_loader=data_loader[CONST.VAL], logger=logger, tb_logger=tb_logger)
+        best_err = max(best_err, acc)
         
         eps_meter = get_meter(meters=['train_loss', 'val_acc'])
         
@@ -278,9 +278,44 @@ def evaluate(model, trainer, train_loader, val_loader, epoch=0,
         EvalMetrics: Evaluation wrapper to compute CMs
 
     """
-    lemniscate = trainer.lemniscate
+    lemniscate_val = trainer.lemniscate_val
+    meter = get_meter(meters=['batch_time', 'data_time'])
+    
+    logger.info('Start Constructing Memory Bank for Validation Dataset')
+    
     end = time.time()
-    acc = kNN(epoch, model, lemniscate, train_loader, val_loader, 200, opt.nce_t, 0)
+    model.eval()
+    with torch.no_grad():
+        for i, batch in enumerate(val_loader):
+            # process batch items: images, labels
+            img = Variable(to_cuda(batch[CONST.IMG], trainer.computing_device))
+            index = Variable(to_cuda(batch['INDEX'], trainer.computing_device, label=True))
+
+            # measure data loading time
+            meter['data_time'].update(time.time() - end)
+
+            end = time.time()
+            logits = model(img)
+            outputs = lemniscate_val(logits, index)
+
+            if i % print_freq == 0:
+                log = 'TRAIN [{:02d}][{:2d}/{:2d}] TIME {:10} DATA {:10}'.\
+                    format(epoch, i, len(val_loader),
+                           "{t.val:.3f} ({t.avg:.3f})".format(t=meter['batch_time']),
+                           "{t.val:.3f} ({t.avg:.3f})".format(t=meter['data_time'])
+                          )
+                logger.info(log)
+
+                tb_logger.add_scalar('data_time', meter['data_time'].val, epoch*len(train_loader)+i)
+                tb_logger.add_scalar('compute_time', meter['batch_time'].val - meter['data_time'].val, epoch*len(train_loader)+i)
+
+            meter['batch_time'].update(time.time() - end)
+            end = time.time()
+
+    logger.info('Start KNN')
+    
+    end = time.time()
+    acc = kNN(epoch, model, lemniscate_val, val_loader, val_loader, 200, opt.nce_t, 0)
     acc = acc * 100
     log = 'EVAL [{:02d}] TIME {:10} ACC {:10}'.\
         format(epoch, "{t:.3f}".format(t=time.time()-end),

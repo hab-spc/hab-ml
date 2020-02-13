@@ -60,18 +60,17 @@ class Trainer(object):
         self.optimizer = self._get_optimizer(lr=lr)
         
         if opt.nce_k > 0:
-            self.lemniscate = NCEAverage(opt.low_dim, opt.ndata, opt.nce_k, opt.nce_t, opt.nce_m)
+            self.lemniscate = NCEAverage(opt.low_dim, opt.ndata, opt.nce_k, opt.nce_t, opt.nce_m).cuda()
         else:
-            self.lemniscate = LinearAverage(opt.low_dim, opt.ndata, opt.nce_t, opt.nce_m)
-            
+            self.lemniscate = LinearAverage(opt.low_dim, opt.ndata, opt.nce_t, opt.nce_m).cuda()
+        
+        self.lemniscate_val = LinearAverage(opt.low_dim, opt.ndata_val, opt.nce_t, 0).cuda()
+        
         # define loss function
         if hasattr(self.lemniscate, 'K'):
-            self.criterion = NCECriterion(opt.ndata)
+            self.criterion = NCECriterion(opt.ndata).cuda()
         else:
-            self.criterion = nn.CrossEntropyLoss()
-            
-        self.lemniscate = self.lemniscate.cuda()
-        self.criterion = self.criterion.cuda()
+            self.criterion = nn.CrossEntropyLoss().cuda()
             
         # meter
         self.meter = {CONST.TRAIN: get_meter(), CONST.VAL: get_meter()}

@@ -5,6 +5,7 @@ from lemniscate.lib.utils import AverageMeter
 import torchvision.transforms as transforms
 import numpy as np
 from utils.constants import Constants as CONST
+from utils.config import opt
 from data.dataloader import to_cuda
 
 def NN(epoch, net, lemniscate, trainloader, testloader, recompute_memory=0):
@@ -81,9 +82,12 @@ def kNN(epoch, net, lemniscate, trainloader, testloader, K, sigma, recompute_mem
     trainLabels = []
     for i in trainloader.dataset.data[CONST.LBL]:
         trainLabels.append(trainloader.dataset.encode_labels(i))
-    trainLabels = torch.LongTensor(trainLabels).cuda()
     
-    C = trainLabels.max() + 1
+    C = max(trainLabels) + 1
+    K_dict = {}
+    for i in range(C):
+        K_dict[i] = trainLabels.count(i)
+    trainLabels = torch.LongTensor(trainLabels).cuda()
 
     if recompute_memory:
         transform_bak = trainloader.dataset.transform
@@ -100,10 +104,12 @@ def kNN(epoch, net, lemniscate, trainloader, testloader, K, sigma, recompute_mem
     top1 = 0.
     top5 = 0.
     end = time.time()
+    net.eval()
     with torch.no_grad():
-        retrieval_one_hot = torch.zeros(K, C).cuda()
+#         retrieval_one_hot = torch.zeros(K, C).cuda()
         for batch_idx, batch in enumerate(testloader):
             inputs = to_cuda(batch[CONST.IMG], torch.device("cuda"))
+            K = min([ K_dict[t] for t in batch[CONST.LBL].tolist() ])
             targets = to_cuda(batch[CONST.LBL], torch.device("cuda"))
             targets = targets.long()
         
@@ -120,7 +126,7 @@ def kNN(epoch, net, lemniscate, trainloader, testloader, K, sigma, recompute_mem
             candidates = trainLabels.view(1,-1).expand(batchSize, -1)
             retrieval = torch.gather(candidates, 1, yi)
 
-            retrieval_one_hot.resize_(batchSize * K, C).zero_()
+            retrieval_one_hot = torch.zeros(batchSize * K, C).cuda()
             retrieval_one_hot.scatter_(1, retrieval.view(-1, 1), 1)
             yd_transform = yd.clone().div_(sigma).exp_()
             probs = torch.sum(torch.mul(retrieval_one_hot.view(batchSize, -1 , C), yd_transform.view(batchSize, -1, 1)), 1)
@@ -134,12 +140,12 @@ def kNN(epoch, net, lemniscate, trainloader, testloader, K, sigma, recompute_mem
             top5 = top5 + correct.narrow(1,0,5).sum().item()
 
             total += targets.size(0)
-
-            print('Test [{}/{}]\t'
-                  'Net Time {net_time.val:.3f} ({net_time.avg:.3f})\t'
-                  'Cls Time {cls_time.val:.3f} ({cls_time.avg:.3f})\t'
-                  'Top1: {:.2f}  Top5: {:.2f}'.format(
-                  total, testsize, top1*100./total, top5*100./total, net_time=net_time, cls_time=cls_time))
+            if batch_idx % opt.print_freq == 0:
+                print('Test [{}/{}]\t'
+                      'Net Time {net_time.val:.3f} ({net_time.avg:.3f})\t'
+                      'Cls Time {cls_time.val:.3f} ({cls_time.avg:.3f})\t'
+                      'Top1: {:.2f}  Top5: {:.2f}'.format(
+                      total, testsize, top1*100./total, top5*100./total, net_time=net_time, cls_time=cls_time))
 
     print(top1*100./total)
 
