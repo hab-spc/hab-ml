@@ -104,10 +104,12 @@ def train_and_evaluate(opt, logger=None, tb_logger=None):
     # if the mode is not training.
     if opt.mode == CONST.TRAIN:
         best_err = trainer.best_err
+        best_val_acc = trainer.best_val_acc
+        
         Logger.section_break('Valid (Epoch {})'.format(trainer.start_epoch))
         acc = evaluate(model=trainer.model, trainer=trainer, train_loader=data_loader[CONST.TRAIN], 
                 val_loader=data_loader[CONST.VAL], logger=logger, tb_logger=tb_logger)
-        best_err = max(best_err, acc)
+        best_val_acc = max(best_val_acc, acc)
         
         eps_meter = get_meter(meters=['train_loss', 'val_acc'])
         
@@ -128,8 +130,10 @@ def train_and_evaluate(opt, logger=None, tb_logger=None):
             eps_meter['val_acc'].update(acc)
                 
             # Remember best error and save checkpoint
-            is_best = acc > best_err
-            best_err = max(acc, best_err)
+            is_best = train_loss < best_err
+            best_err = min(train_loss, best_err)
+            is_val_best = acc > best_val_acc
+            best_val_acc = max(acc, best_val_acc)
             state = trainer.generate_state_dict(epoch=epoch, best_err=best_err)
 
             if epoch % opt.save_freq == 0:
@@ -139,6 +143,10 @@ def train_and_evaluate(opt, logger=None, tb_logger=None):
             if is_best:
                 trainer.save_checkpoint(state, is_best=is_best,
                                         filename='model_best.pth.tar')
+            if is_val_best:
+                logger.info('=> best val model so far, saving...')
+                trainer.save_checkpoint(state, is_best = False, 
+                                           filename='val_model_best.pth.tar' )
 
     #==== BEGIN OPTION 2: EVALUATION ====#
     # EVALUATE the model if set to evaluation mode

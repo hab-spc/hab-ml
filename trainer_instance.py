@@ -55,7 +55,8 @@ class Trainer(object):
         if not os.path.isdir(self.model_dir):
             os.makedirs(self.model_dir)
         self.start_epoch = 0
-        self.best_err = 0
+        self.best_err = np.inf
+        self.best_val_acc = 0
 
         self.optimizer = self._get_optimizer(lr=lr)
         
