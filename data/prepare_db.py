@@ -231,7 +231,9 @@ class DatasetGenerator(object):
         print('Train and Val Dataframe contructed')
         print('Train Dataframe Class Counts table')
         print(train_df['label'].value_counts())
+        print('Training data size: {}'.format(train_df.shape[0]))
         print('VAL Dataframe Class Counts table')
+        print('Validation data size: {}'.format(val_df.shape[0]))
         print(val_df['label'].value_counts())
 
         # Store csv and info.txt
@@ -249,11 +251,13 @@ class DatasetGenerator(object):
         print('Info is stored to ' + info_path)
         f = open(info_path, 'w')
         sys.stdout = f
-        print('Train and Test Dataframe contructed')
+        print('Train and Val Dataframe contructed')
         print('Train Dataframe Class Counts table')
         print(train_df['label'].value_counts())
+        print('Training data size: {}'.format(train_df.shape[0]))
         print('VAL Dataframe Class Counts table')
         print(val_df['label'].value_counts())
+        print('Validation data size: {}'.format(val_df.shape[0]))
         f.close()
 
     def save(self):
