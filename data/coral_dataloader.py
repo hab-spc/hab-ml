@@ -13,7 +13,7 @@ import torch
 import torch.utils.data as data
 import torchvision.transforms as transforms
 from torch.autograd import Variable
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, ConcatDataset
 
 # Project level imports
 from data.d_utils import pil_loader, grab_classes
@@ -49,17 +49,22 @@ class Coral_SPCHABDataset(Dataset, DataParser):
         # Initialize dataset attributes
         self.mode = mode
         self.transforms = transforms
+        self.camera = None
 
-        # get the datasets
+        if self.mode != CONST.DEPLOY:
+            self.camera = os.path.basename(os.path.dirname(csv_file))
+
+            # get the datasets
         # === Read in the dataset ===#
         # options for reading datasets can be from a csv file or directory containing csv files.
         self.data = self.read_csv_dataset(csv_file)
 
-        self.le = HABLblEncoder(mode=mode)
+        self.le = HABLblEncoder(mode=mode if self.camera != CONST.LAB else CONST.DEPLOY)
         self.classes, self.num_class = self.le.grab_classes(data=self.data)
         self.cls2idx, self.idx2cls = self.set_encode_decode(self.classes)
+        self.le.fit(self.classes)
 
-        self.default_unlabeled_idx = 0
+        self.default_unlabeled_idx = 0 #OTHER
 
     def __len__(self):
         return len(self.data)
@@ -111,15 +116,18 @@ def get_coral_dataloader(csv_file=None, data_dir=None, camera=CONST.PIER,
         mean_std = get_dataset_mean_and_std(csv_file)
 
         # get the two datasets
-        logger.info('Loading pier dataset')
+        logger.info('Loading pier dataset...')
         pier_dataset = Coral_SPCHABDataset(csv_file=csv_file.format(CONST.PIER, mode),
                                       mean_std=mean_std,
                                       transforms=DATA_TRANSFORMS[mode])
-        logger.info('Loading lab dataset')
+        logger.debug(f'Pier Dataset Distribution\n{"-"*30}\n'
+                     f'{pier_dataset.get_class_counts()}\n')
+        logger.info('Loading lab dataset...')
         lab_dataset = Coral_SPCHABDataset(csv_file=csv_file.format(CONST.LAB, mode),
                                       mean_std=mean_std,
                                       transforms=DATA_TRANSFORMS[mode])
-
+        logger.debug(f'Lab Dataset Distribution\n{"-"*30}\n'
+                     f'{lab_dataset.get_class_counts()}\n')
         dataset = ConcatDataset(pier_dataset, lab_dataset)
 
     else:
@@ -139,7 +147,9 @@ def get_coral_dataloader(csv_file=None, data_dir=None, camera=CONST.PIER,
 
         dataset = Coral_SPCHABDataset(csv_file=csv_file, mean_std=mean_std,
                                       transforms=DATA_TRANSFORMS[mode])
+        logger.debug(f'Dataset Distribution\n{"-"*30}\n{dataset.get_class_counts()}\n')
 
+    logger.info('Dataset size: {}'.format(dataset.__len__()))
     data_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
                                               shuffle=shuffle,
                                               num_workers=num_workers,
@@ -152,10 +162,10 @@ def _init_fn(worker_id):
 
 if __name__ == '__main__':
     from data.d_utils import to_cuda
-    opt.data_dir = 'DB/coral'
+    opt.data_dir = 'DB/coral_c34_workshop2019'
     opt.mean_std_json = os.path.join(opt.data_dir, 'mean_std.json')
 
-    opt.model_dir = '../experiments/default/'
+    opt.model_dir = '../experiments/alexnet_coral_c34_workshop2019/'
 
     train_data_loader = get_coral_dataloader(data_dir=opt.data_dir, camera='pier',
                                         batch_size=opt.batch_size,
@@ -181,6 +191,3 @@ if __name__ == '__main__':
         target_img = to_cuda(target_batch[CONST.IMG], computing_device)
 
         print(src_label)
-
-
-

@@ -188,13 +188,14 @@ def freezing_layers(model):
 
     """
     logger = logging.getLogger('Model_freeze')
+    logger.setLevel(logging.INFO)
     idx = 0
     for name, param in model.named_parameters():
         if 'conv' in name:
             idx += 1
-            logger.info(name + ' ('+str(idx)+')')
+            logger.debug(name + ' ('+str(idx)+')')
     total_conv_layers = idx
-    logger.info('There are total '+str(idx)+' conv layers.')
+    logger.debug('There are total '+str(idx)+' conv layers.')
 
     if opt.interactive:
         opt.freezed_layers = int(input('Enter number of layers to freeze? (ex. 0) \n'))

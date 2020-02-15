@@ -30,6 +30,7 @@ class HABLblEncoder(LabelEncoder):
 
         self.mode = mode
         self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(opt.logging_level)
 
         self.hab_classes = open(opt.hab_eval_classes, 'r').read().splitlines()
         self.habcls2idx = {cls:idx for idx, cls in enumerate(self.hab_classes)}

@@ -43,6 +43,9 @@ class HABClassifier(nn.Module):
         x = self.classifier(x)
         return x
 
+    def get_params(self):
+        return self.parameters()
+
     @staticmethod
     def get_vgg16_arch(num_classes, pretrained=False):
         vgg16_model = vgg16_bn(pretrained=pretrained)

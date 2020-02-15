@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 
 # Project level imports
 from model import resnet
-from model.coral import DeepCORAL
+from model.coral import HABCORAL
 from trainer import Trainer, seed_torch
 from data.coral_dataloader import get_coral_dataloader
 from data.dataloader import get_dataloader
@@ -45,9 +45,9 @@ def coral_train_and_evaluate(opt, logger=None, tb_logger=None):
 
     # Read in dataset
     # check the path for the data loader to make sure it is loading the right data set
-    train_data_loader = get_coral_dataloader(data_dir=opt.data_dir, camera='pier',
-                                        batch_size=opt.batch_size,
-                                        mode=CONST.TRAIN)
+    train_data_loader = get_coral_dataloader(data_dir=opt.data_dir,
+                                             batch_size=opt.batch_size,
+                                             mode=CONST.TRAIN)
 
     src_data_loader = get_coral_dataloader(data_dir=opt.data_dir, camera='pier',
                                         batch_size=opt.batch_size,
@@ -56,9 +56,12 @@ def coral_train_and_evaluate(opt, logger=None, tb_logger=None):
                                         batch_size=opt.batch_size,
                                         mode=CONST.VAL)
     # Create model
-    model = DeepCORAL(num_classes=opt.class_num)
+    Logger.section_break('MODEL ARCHITECTURE')
+    model = HABCORAL(arch=opt.arch, num_classes=opt.class_num)
+    logger.debug(model)
 
     # Initialize Trainer for initializing losses, optimizers, loading weights, etc
+    Logger.section_break('MODEL TRAINER')
     trainer = Trainer(model=model, model_dir=opt.model_dir, mode=opt.mode,
                       resume=opt.resume, lr=opt.lr, momentum=opt.momentum,
                       class_count=train_data_loader.dataset.datasets[0].get_class_counts())
@@ -73,20 +76,19 @@ def coral_train_and_evaluate(opt, logger=None, tb_logger=None):
         best_err = trainer.best_err
         # Evaluate on validation set
         Logger.section_break('Valid SOURCE (Epoch {})'.format(trainer.start_epoch))
-        src_err, src_acc, _, src_metrics_test = evaluate(trainer.model,
-                                                         trainer,
+        src_err, src_acc, _, src_metrics_test = evaluate(trainer.model, trainer,
                                                          src_data_loader,
-                                                         trainer.start_epoch, opt.batch_size, logger,
-                                                         tb_logger,
-                                                         max_iters=None)
+                                                         trainer.start_epoch,
+                                                         opt.batch_size, logger,
+                                                         tb_logger, max_iters=None)
         Logger.section_break('Valid TARGET (Epoch {})'.format(trainer.start_epoch))
-        target_err, target_acc, _, target_metrics_test = evaluate(trainer.model,
-                                                                  trainer,
+        target_err, target_acc, _, target_metrics_test = evaluate(trainer.model, trainer,
                                                                   target_data_loader,
-                                                                  trainer.start_epoch, opt.batch_size,
-                                                                  logger,
+                                                                  trainer.start_epoch,
+                                                                  opt.batch_size, logger,
                                                                   tb_logger,
-                                                                  max_iters=None)
+                                                                  max_iters=None,
+                                                                  hab_eval=True)
         metrics_best = src_metrics_test
 
         eps_meter = get_meter(meters=['class_train_loss', 'class_src_loss',
@@ -96,7 +98,6 @@ def coral_train_and_evaluate(opt, logger=None, tb_logger=None):
 
         for ii, epoch in enumerate(range(trainer.start_epoch,
                                          trainer.start_epoch + opt.epochs)):
-
             # Train for one epoch
             Logger.section_break('Train (Epoch {})'.format(epoch))
             scores = train(trainer.model, trainer, train_data_loader,
@@ -106,20 +107,17 @@ def coral_train_and_evaluate(opt, logger=None, tb_logger=None):
 
             # Evaluate on validation set
             Logger.section_break('Valid SOURCE (Epoch {})'.format(epoch))
-            err, acc, _, metrics_test = evaluate(trainer.model, trainer,
-                                 src_data_loader,
-                                 epoch, opt.batch_size, logger,
-                                 tb_logger,
-                                 max_iters=None)
+            err, acc, _, metrics_test = evaluate(trainer.model, trainer, src_data_loader,
+                                                 epoch, opt.batch_size, logger,
+                                                 tb_logger, max_iters=None)
             eps_meter['class_src_loss'].update(err)
             eps_meter['class_src_acc'].update(acc)
 
             Logger.section_break('Valid TARGET (Epoch {})'.format(epoch))
             err, acc, _, metrics_test = evaluate(trainer.model, trainer,
-                                     target_data_loader,
-                                     epoch, opt.batch_size, logger,
-                                     tb_logger,
-                                     max_iters=None)
+                                                 target_data_loader, epoch,
+                                                 opt.batch_size, logger, tb_logger,
+                                                 max_iters=None, hab_eval=True)
             eps_meter['class_target_loss'].update(err)
             eps_meter['class_target_acc'].update(acc)
 
@@ -159,15 +157,15 @@ def coral_train_and_evaluate(opt, logger=None, tb_logger=None):
     # EVALUATE the model if set to evaluation mode
     # Below you'll receive a more comprehensive report of the evaluation in the eval.log
     elif opt.mode == CONST.VAL:
-        src_err, src_acc, src_run_time, src_metrics = evaluate(
-            model=trainer.model, trainer=trainer,
-            data_loader=src_data_loader,
-            logger=logger, tb_logger=tb_logger)
+        src_err, src_acc, src_run_time, src_metrics = evaluate(model=trainer.model,
+                                                               trainer=trainer,
+                                                               data_loader=src_data_loader,
+                                                               logger=logger,
+                                                               tb_logger=tb_logger)
 
         target_err, target_acc, target_run_time, target_metrics = evaluate(
-            model=trainer.model, trainer=trainer,
-            data_loader=src_data_loader,
-            logger=logger, tb_logger=tb_logger)
+            model=trainer.model, trainer=trainer, data_loader=src_data_loader,
+            logger=logger, tb_logger=tb_logger, hab_eval=True)
 
         Logger.section_break('EVAL COMPLETED')
         model_parameters = filter(lambda p: p.requires_grad,
@@ -296,9 +294,8 @@ def train(model, trainer, train_loader,
     return LossTuple(*meter_values)
 
 
-def evaluate(model, trainer, data_loader, epoch=0,
-             batch_size=opt.batch_size, logger=None, tb_logger=None,
-             max_iters=None):
+def evaluate(model, trainer, data_loader, epoch=0, batch_size=opt.batch_size,
+             logger=None, tb_logger=None, max_iters=None, hab_eval=False):
     """ Evaluate model
 
     Similar to `train()` structure, where the function includes bookkeeping
@@ -310,6 +307,7 @@ def evaluate(model, trainer, data_loader, epoch=0,
     compute the confusion matrix.
 
     Args:
+        hab_eval:
         model: Classification model
         trainer (Trainer): Training wrapper
         data_loader (torch.data.Dataloader): Generator data loading instance
@@ -347,7 +345,7 @@ def evaluate(model, trainer, data_loader, epoch=0,
             end = time.time()
             logits, _ = model(img, img)
             loss = criterion(logits, label)
-            acc = accuracy(logits, label)
+            acc = metrics.accuracy(logits, label, hab_eval=hab_eval)
             batch_size = list(batch[CONST.LBL].shape)[0]
 
             # update metrics
@@ -414,7 +412,7 @@ def deploy(opt, logger=None):
                                  input_size=opt.input_size)
 
     # load model
-    model = DeepCORAL(num_classes=opt.class_num)
+    model = HABCORAL(arch=opt.arch, num_classes=opt.class_num)
 
     # Initialize Trainer for initializing losses, optimizers, loading weights, etc
     trainer = Trainer(model=model, model_dir=opt.model_dir, mode=opt.mode,
@@ -423,9 +421,9 @@ def deploy(opt, logger=None):
     # Run Predictions
     Logger.section_break('Deploy')
     logger.info('Starting deployment...')
-    err, acc, run_time, metrics = evaluate(
-        model=trainer.model, trainer=trainer, data_loader=data_loader,
-        logger=logger, tb_logger=tb_logger)
+    err, acc, run_time, metrics = evaluate(model=trainer.model, trainer=trainer,
+                                           data_loader=data_loader, logger=logger,
+                                           tb_logger=tb_logger, hab_eval=opt.hab_eval)
 
     dest_dir = opt.deploy_data + '_static_html' if opt.lab_config else opt.deploy_data
     metrics.save_predictions(start_datetime, run_time.avg, opt.model_dir,
@@ -462,6 +460,7 @@ if __name__ == '__main__':
     Logger(log_filename=os.path.join(opt.model_dir, log_fname),
                     level=opt.logging_level, log2file=opt.log2file)
     logger = logging.getLogger('go-train')
+    Logger.section_break(f'*** MODE SELECTED: {opt.mode} ***')
     Logger.section_break('User Config')
     logger.info(pformat(opt._state_dict()))
 

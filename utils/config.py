@@ -37,30 +37,31 @@ class Config:
     data_dir = "data/DB/coral_c34_workshop2019"
     mean_std_json = os.path.join(data_dir, 'mean_std.json')
     classes_fname = "train_data.info"
-    #todo double check if hab_eval_classes used elsewhere
+
+    # HAB data
     hab_eval_classes = '/data6/phytoplankton-db/hab.txt'
     hab_eval_mapping = '/data6/phytoplankton-db/hab_mapping.csv'
     hab_in_situ_summer2019 = '/data6/phytoplankton-db/csv/hab_in_situ_summer2019.csv'
     hab_in_vitro_summer2019 = '/data6/phytoplankton-db/csv/hab_in_vitro_summer2019.csv'
 
     # Network
-    arch = 'resnet50'
-    # model_dir = './experiments/alexnet_coral_c34_workshop2019/'
-    model_dir = './experiments/default/'
+    arch = 'resnet18'
+    model_dir = './experiments/resnet_coral_c34_workshop2019/'
+    # model_dir = './experiments/default/'
     input_size = 224
 
     # Training hyperparameters
     pretrained = True
     lr = 0.001
     momentum = 0.9
-    epochs = 30
+    epochs = 60
     batch_size = 128
     weighted_loss = True
     freezed_layers = 0
     lambda_coral = 0.5
 
     # Optimizer
-    use_adam = False
+    use_adam = True
     use_rmsprop = False
     use_adagrad = False
 
@@ -77,7 +78,7 @@ class Config:
 
     # Training flags
     resume = False
-    print_freq = 1
+    print_freq = 15
     save_freq = 20
     early_stop = True
     estop_threshold = 3
@@ -99,7 +100,7 @@ class Config:
     
     # Deploy Hyperparameters
     lab_config = False
-    deploy_data = 'data/DB/csv/hab_in_vitro_20190530.csv'
+    deploy_data = 'data/DB/csv/hab_in_situ_20190523.csv'
     hab_eval = True
     
     # Dataloader

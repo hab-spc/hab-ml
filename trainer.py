@@ -40,8 +40,8 @@ class Trainer(object):
             resume: (str) Path to pretrained model
 
         """
-        self.logger = logging.getLogger('trainer')
-        self.logger.setLevel(opt.logging_level)
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.INFO)
         self.computing_device = self._set_cuda()
 
         self.model = model.to(self.computing_device)
@@ -52,7 +52,8 @@ class Trainer(object):
         self.start_epoch = 0
         self.best_err = np.inf
 
-        self.optimizer = self._get_optimizer(lr=lr, momentum=momentum)
+        self.optimizer = self._set_optimizer(self.model.get_params(),
+                                             lr=lr, momentum=momentum)
         
         # Defaulted to CrossEntropyLoss
         #TODO set interactive mode for setting the losses
@@ -63,13 +64,15 @@ class Trainer(object):
             else:
                 weighted_y_n = opt.weighted_loss
 
+            self.logger.info(f'Weighted Loss selected: {weighted_y_n}')
+
             if weighted_y_n or weighted_y_n == 'y':
                 weight = np.array([x for _,x in sorted(zip(class_count.keys().tolist(),class_count.tolist()))])
-                self.logger.info('Class_count is: '+ str(weight))
+                self.logger.debug('Class_count is: '+ str(weight))
                 weight = weight/sum(weight)
-                self.logger.info('Classes Weights are: '+ str(weight))
+                self.logger.debug('Classes Weights are: '+ str(weight))
                 weight = np.flip(weight).tolist()
-                self.logger.info('Weighted Loss will be: ' + str(weight))
+                self.logger.debug('Weighted Loss will be: ' + str(weight))
                 weight = torch.FloatTensor(weight).cuda()
                 self.criterion = nn.CrossEntropyLoss(weight=weight)
             else:
@@ -128,7 +131,7 @@ class Trainer(object):
             filename = os.path.join(self.model_dir, 'model_best.pth.tar')
         torch.save(state, filename)
 
-    def _get_optimizer(self, lr, momentum, use_adam=opt.use_adam,
+    def _set_optimizer(self, parameters, lr, momentum=opt.momentum, use_adam=opt.use_adam,
                        use_rmsprop=opt.use_rmsprop,
                        use_adagrad=opt.use_adagrad):
         """Get optimizer based off model parameters
@@ -137,23 +140,22 @@ class Trainer(object):
         False
 
         """
-        parameters = [
-        {'params':  self.model.shared_net.features.parameters()},
-        {'params': self.model.shared_net.classifier[:6].parameters()},
-        # fc8 -> 7th element (index 6) in the Sequential block
-        {'params': self.model.shared_net.classifier[6].parameters(), 'lr': 10 * opt.lr}]
-
+        msg = 'Optimizer selected: {} | LR: {}'
         if use_adam:
+            self.logger.info(msg.format('Adam', lr))
             return optim.Adam(parameters, lr=lr)
 
         elif use_rmsprop:
-            return optim.RMSprop(parameters, lr=lr, momentum=momentum)
+            self.logger.info(msg.format('RMSProp', lr))
+            return optim.RMSprop(parameters, lr=lr)
 
         elif use_adagrad:
-            return optim.Adagrad(parameters, lr=lr, momentum=momentum)
+            self.logger.info(msg.format('Adagrad', lr))
+            return optim.Adagrad(parameters, lr=lr)
 
         else:
-            return optim.SGD(parameters, lr=lr, momentum=momentum)
+            self.logger.info(msg.format('SGD', lr))
+            return optim.SGD(parameters, lr=lr, momentum=momentum, weight_decay=5e-4)
 
     def _set_cuda(self):
         """Set computing device to available cuda devices"""
@@ -169,38 +171,21 @@ class Trainer(object):
         return computing_device
 
 def CORAL(source, target):
+    d = source.data.shape[1]
 
-    d = source.size(1)  # dim vector
+    # source covariance
+    xm = torch.mean(source, 0, keepdim=True) - source
+    xc = xm.t() @ xm
 
-    source_c = compute_covariance(source)
-    target_c = compute_covariance(target)
+    # target covariance
+    xmt = torch.mean(target, 0, keepdim=True) - target
+    xct = xmt.t() @ xmt
 
-    loss = torch.sum(torch.mul((source_c - target_c), (source_c - target_c)))
+    # frobenius norm between source and target
+    loss = torch.sum(torch.mul((xc - xct), (xc - xct)))
+    loss = loss/(4*d*d)
 
-    loss = loss / (4 * d * d)
     return loss
-
-
-def compute_covariance(input_data):
-    """
-    Compute Covariance matrix of the input data
-    """
-    n = input_data.size(0)  # batch_size
-
-    # Check if using gpu or cpu
-    if input_data.is_cuda:
-        device = torch.device('cuda')
-    else:
-        device = torch.device('cpu')
-
-    id_row = torch.ones(n).resize(1, n).to(device=device)
-    sum_column = torch.mm(id_row, input_data)
-    mean_column = torch.div(sum_column, n)
-    term_mul_2 = torch.mm(mean_column.t(), mean_column)
-    d_t_d = torch.mm(input_data.t(), input_data)
-    c = torch.add(d_t_d, (-1 * term_mul_2)) * 1 / (n - 1)
-
-    return c
 
 def seed_torch(seed=1029):
     random.seed(seed)

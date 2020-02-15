@@ -79,7 +79,7 @@ class EvalMetrics(object):
         self.ids = ids
 
         # Initialize basename of the file as `pre` and create figs directory
-        self.pre = None
+        self.pre = ''
         self.results_dir = os.path.join(model_dir, 'figs')
         if not os.path.exists(self.results_dir):
             os.makedirs(self.results_dir)
@@ -122,7 +122,21 @@ class EvalMetrics(object):
 
         ids = ids
         self.ids.extend(ids)
-    
+
+    def accuracy(self, predictions, targets, axis=1, hab_eval=False):
+        if hab_eval:
+            batch_size = predictions.size(0)
+            predictions = self.le.hab_transform2idx(predictions.max(axis)[1].cpu())
+            targets = self.le.hab_transform2idx(targets.cpu())
+            hits = [t==p for t,p in zip(targets, predictions)]
+            return 100. * sum(hits) / float(batch_size)
+        else:
+            batch_size = predictions.size(0)
+            predictions = predictions.max(axis)[1].type_as(targets)
+            hits = predictions.eq(targets)
+            acc = 100. * hits.sum().float() / float(batch_size)
+            return acc
+
     def compute_hab_acc(self):
         """ Compute HAB Accuracy
 

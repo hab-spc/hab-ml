@@ -24,6 +24,9 @@ class DataParser(object):
             classes (str): Abs path to the training.log that contains the classes
             save (bool): Flag to save the merged dataset
         """
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.INFO)
+
         if csv_fname:
             self.csv_fname = csv_fname
             self.csv_data = self.read_csv_dataset(csv_fname)
@@ -132,6 +135,7 @@ class DataParser(object):
         """Set class2idx, idx2class encoding/decoding dictionaries"""
         cls2idx = {i: idx for idx, i in enumerate(sorted(class_list))}
         idx2cls = {idx: i for idx, i in enumerate(sorted(class_list))}
+        self.logger.debug('Class mappings: {}'.format(cls2idx))
         return cls2idx, idx2cls
 
     def get_ROI_counts(self, data, date_col='image_date', gtruth=False, pred=False, verbose=False):
