@@ -9,8 +9,7 @@ RESCALE_SIZE = INPUT_SIZE
 DATA_TRANSFORMS = {
     CONST.TRAIN: transforms.Compose([transforms.Resize(RESCALE_SIZE),
                                      transforms.CenterCrop(INPUT_SIZE),
-                                     transforms.RandomAffine(
-                                         360,
+                                     transforms.RandomAffine(360,
                                          translate=(0.1, 0.1),
                                          scale=None,
                                          shear=None,

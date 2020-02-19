@@ -89,7 +89,7 @@ class EvalMetrics(object):
         self.softmax = nn.Softmax(dim=1)
 
         # Initialize encoder for transforming labels into HAB labels
-        self.le = HABLblEncoder()
+        self.le = HABLblEncoder(mode=CONST.DEPLOY)
         self.classes, self.num_class =self.le.grab_classes()
         self.le.fit(self.classes)
 
@@ -431,8 +431,10 @@ class EvalMetrics(object):
         log = '[FIGS] {}'.format(results_dir)
 
         # Compute classification report
+        target_names = set(self.predictions + self.gtruth)
+        target_names = [self.le.habidx2cls[idx] for idx in target_names]
         logger.info(metrics.classification_report(self.gtruth, self.predictions,
-                                          target_names=self.le.hab_classes))
+                                              target_names=target_names))
         logger.info(log)
 
     def _plot_dataset_distribution(self, data_dict):

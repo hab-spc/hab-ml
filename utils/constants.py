@@ -64,6 +64,7 @@ class Constants():
 
     PIER = 'pier'
     LAB = 'lab'
+    CORAL = 'coral'
 
 """TO BE DEPRECATED"""
 class SPCConstants():

@@ -12,7 +12,7 @@ RESNET18 = 'resnet18'
 class HABCORAL(nn.Module):
     __names__ = {ALEXNET, RESNET18, VGG16}
 
-    def __init__(self, arch, num_classes=1000):
+    def __init__(self, arch, num_classes=1000, coral=opt.coral):
         super(HABCORAL, self).__init__()
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
@@ -20,20 +20,19 @@ class HABCORAL(nn.Module):
         self.logger.info(f'Architecture selected: {arch} | Num Classes: {num_classes}')
 
         self.num_classes = num_classes
+        self.coral = coral
         if arch == ALEXNET:
             self.shared_net, self.classifier = HABCORAL.get_alexnet_arch(num_classes)
-            self.classifier[6].weight.data.normal_(0, 0.005)
+            if self.coral:
+                self.classifier[6].weight.data.normal_(0, 0.005)
+                self.classifier[6].bias.data.fill_(0.01)
 
 
         elif arch == RESNET18:
             self.shared_net, self.classifier = HABCORAL.get_resnet18_arch(num_classes)
-            self.classifier.weight.data.normal_(0, 0.005)
-
-        # self.shared_net = alexnet(pretrained=True)
-        # self.shared_net.classifier[6] = nn.Linear(4096, num_classes)
-        #
-        # nn.init.normal_(self.shared_net.classifier[6].weight, mean=0, std=5e-3)
-        # self.shared_net.classifier[6].bias.data.fill_(0.01)
+            if self.coral:
+                self.classifier.weight.data.normal_(0, 0.005)
+                self.classifier.bias.data.fill_(0.01)
 
         self.logger.debug(self.shared_net)
 
@@ -48,15 +47,14 @@ class HABCORAL(nn.Module):
         return src, tgt
 
     def get_params(self):
-        # try out dictionary
-        shared_net_params = self.shared_net.parameters()
-        classifier_parameters = self.classifier.parameters()
-        parameters = [
-            {'params': shared_net_params},
-            {'params': classifier_parameters, 'lr': 10*opt.lr}]
-        self.logger.debug('Parameters returned: {}'.format(parameters))
-        return parameters
-
+        if self.coral:
+            parameters = [
+                {'params': self.shared_net.parameters()},
+                {'params': self.classifier.parameters(), 'lr': 10 * opt.lr}]
+            self.logger.debug('Parameters returned: {}'.format(parameters))
+            return parameters
+        else:
+            return self.parameters()
 
     @staticmethod
     def get_alexnet_arch(num_classes, pretrained=False):

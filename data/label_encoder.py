@@ -34,6 +34,7 @@ class HABLblEncoder(LabelEncoder):
 
         self.hab_classes = open(opt.hab_eval_classes, 'r').read().splitlines()
         self.habcls2idx = {cls:idx for idx, cls in enumerate(self.hab_classes)}
+        self.habidx2cls = {idx:cls for idx, cls in enumerate(self.hab_classes)}
 
     def grab_classes(self, data=None, model_dir=None):
         model_dir = model_dir if model_dir != None else opt.model_dir

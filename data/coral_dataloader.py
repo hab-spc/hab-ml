@@ -124,7 +124,7 @@ def get_coral_dataloader(csv_file=None, data_dir=None, camera=CONST.PIER,
                      f'{pier_dataset.get_class_counts()}\n')
         logger.info('Loading lab dataset...')
         lab_dataset = Coral_SPCHABDataset(csv_file=csv_file.format(CONST.LAB, mode),
-                                      mean_std=mean_std,
+                                      mean_std=mean_std, mode=mode,
                                       transforms=DATA_TRANSFORMS[mode])
         logger.debug(f'Lab Dataset Distribution\n{"-"*30}\n'
                      f'{lab_dataset.get_class_counts()}\n')
@@ -145,7 +145,7 @@ def get_coral_dataloader(csv_file=None, data_dir=None, camera=CONST.PIER,
             }
         }
 
-        dataset = Coral_SPCHABDataset(csv_file=csv_file, mean_std=mean_std,
+        dataset = Coral_SPCHABDataset(csv_file=csv_file, mean_std=mean_std, mode=mode,
                                       transforms=DATA_TRANSFORMS[mode])
         logger.debug(f'Dataset Distribution\n{"-"*30}\n{dataset.get_class_counts()}\n')
 

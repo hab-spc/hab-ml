@@ -1,5 +1,6 @@
-from __future__ import absolute_import
+from __future__ import absolute_import, print_function
 
+import argparse
 import logging
 
 import os
@@ -31,6 +32,7 @@ class Config:
 
     # Mode
     mode = CONST.DEPLOY
+    coral = False
     interactive = False
 
     # Data
@@ -46,7 +48,7 @@ class Config:
 
     # Network
     arch = 'resnet18'
-    model_dir = './experiments/resnet_coral_c34_workshop2019/'
+    model_dir = './experiments/resnet_no_coral_c34_workshop2019/'
     # model_dir = './experiments/default/'
     input_size = 224
 
@@ -54,7 +56,7 @@ class Config:
     pretrained = True
     lr = 0.001
     momentum = 0.9
-    epochs = 60
+    epochs = 100
     batch_size = 128
     weighted_loss = True
     freezed_layers = 0
@@ -79,7 +81,7 @@ class Config:
     # Training flags
     resume = False
     print_freq = 15
-    save_freq = 20
+    save_freq = 15
     early_stop = True
     estop_threshold = 3
     log2file = False
@@ -100,7 +102,7 @@ class Config:
     
     # Deploy Hyperparameters
     lab_config = False
-    deploy_data = 'data/DB/csv/hab_in_situ_20190523.csv'
+    deploy_data = 'data/DB/csv/hab_in_vitro_20190530.csv'
     hab_eval = True
     
     # Dataloader

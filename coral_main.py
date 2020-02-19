@@ -15,10 +15,8 @@ from datetime import datetime
 from tensorboardX import SummaryWriter
 import numpy as np
 import torch
-import matplotlib.pyplot as plt
 
 # Project level imports
-from model import resnet
 from model.coral import HABCORAL
 from trainer import Trainer, seed_torch
 from data.coral_dataloader import get_coral_dataloader
@@ -28,7 +26,6 @@ from utils.constants import Constants as CONST
 from utils.config import opt, set_config
 from utils.eval_utils import accuracy, get_meter, EvalMetrics, vis_training, update_meter
 from utils.logger import Logger
-from utils.model_sql import model_sql
 
 # Module level constants
 seed_torch(opt.SEED)
@@ -57,7 +54,7 @@ def coral_train_and_evaluate(opt, logger=None, tb_logger=None):
                                         mode=CONST.VAL)
     # Create model
     Logger.section_break('MODEL ARCHITECTURE')
-    model = HABCORAL(arch=opt.arch, num_classes=opt.class_num)
+    model = HABCORAL(arch=opt.arch, num_classes=opt.class_num, coral=opt.coral)
     logger.debug(model)
 
     # Initialize Trainer for initializing losses, optimizers, loading weights, etc
@@ -250,7 +247,10 @@ def train(model, trainer, train_loader,
 
         # compute gradient and do sgd step
         optimizer.zero_grad()
-        total_loss.backward()
+        if model.coral:
+            total_loss.backward()
+        else:
+            class_loss.backward()
 
         if i % print_freq == 0:
             log = 'TRAIN [{:02d}][{:2d}/{:2d}] TIME {:10} DATA {:10} ACC {:10} ' \
@@ -407,14 +407,15 @@ def deploy(opt, logger=None):
     start_datetime = datetime.today().strftime('%Y-%m-%d_%H:%M:%S')
 
     # read data
-    data_loader = get_dataloader(mode=CONST.DEPLOY, csv_file=opt.deploy_data,
-                                 batch_size=opt.batch_size,
-                                 input_size=opt.input_size)
+    data_loader = get_coral_dataloader(mode=CONST.DEPLOY, csv_file=opt.deploy_data,
+                                 batch_size=opt.batch_size)
 
     # load model
-    model = HABCORAL(arch=opt.arch, num_classes=opt.class_num)
+    Logger.section_break('MODEL ARCHITECTURE')
+    model = HABCORAL(arch=opt.arch, num_classes=opt.class_num, coral=opt.coral)
 
     # Initialize Trainer for initializing losses, optimizers, loading weights, etc
+    Logger.section_break('MODEL TRAINER')
     trainer = Trainer(model=model, model_dir=opt.model_dir, mode=opt.mode,
                       resume=opt.resume)
 
@@ -423,7 +424,7 @@ def deploy(opt, logger=None):
     logger.info('Starting deployment...')
     err, acc, run_time, metrics = evaluate(model=trainer.model, trainer=trainer,
                                            data_loader=data_loader, logger=logger,
-                                           tb_logger=tb_logger, hab_eval=opt.hab_eval)
+                                           tb_logger=tb_logger)
 
     dest_dir = opt.deploy_data + '_static_html' if opt.lab_config else opt.deploy_data
     metrics.save_predictions(start_datetime, run_time.avg, opt.model_dir,
@@ -453,6 +454,53 @@ def deploy(opt, logger=None):
 
 
 if __name__ == '__main__':
+
+    parser = argparse.ArgumentParser(
+        description='coral_main.py',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--mode', type=str, default=opt.mode)
+    parser.add_argument('--interactive', action='store_true', dest=CONST.INTERACTIVE)
+    parser.add_argument('--arch', type=str, default=opt.arch)
+    parser.add_argument('--model_dir', type=str, default=opt.model_dir)
+    parser.add_argument('--data_dir', type=str, default=opt.data_dir)
+
+    # Training hyperparameters
+    parser.add_argument('--lr', type=float, default=opt.lr)
+    parser.add_argument('--epochs', type=int, default=opt.epochs)
+    parser.add_argument('--batch_size', '-b', type=int, default=opt.batch_size)
+    parser.add_argument('--weighted_loss', dest=CONST.WEIGHTED_LOSS,
+                        action='store_true', default=opt.weighted_loss)
+    parser.add_argument('--freezed_layers', type=int, default=opt.freezed_layers)
+    parser.add_argument('--pretrained', dest=CONST.PRETRAINED, action='store_true',
+                        default=opt.pretrained)
+
+    # Model hyperparameters
+    parser.add_argument('--input_size', type=int, default=opt.input_size)
+
+    # Training flags
+    parser.add_argument('--gpu', '-g', type=str, default=opt.gpu)
+    parser.add_argument('--resume', type=str, default=opt.resume)
+    parser.add_argument('--print_freq', type=int, default=opt.print_freq)
+    parser.add_argument('--save_freq', type=int, default=opt.save_freq)
+    parser.add_argument('--log2file', dest=CONST.LOG2FILE, action='store_true',
+                        default=opt.log2file)
+    parser.add_argument('--logging_level', type=int, default=opt.logging_level)
+    parser.add_argument('--save_model_db', dest=CONST.SAVE_MODEL_DB,
+                        action='store_true', default=opt.save_model_db)
+
+    # Deploy hyperparameters
+    parser.add_argument('--deploy_data', type=str, default=opt.deploy_data)
+    parser.add_argument('--lab_config', dest=CONST.LAB_CONFIG, action='store_true',
+                        default=opt.lab_config)
+    parser.add_argument('--hab_eval', dest=CONST.HAB_EVAL, action='store_true',
+                        default=opt.hab_eval)
+    parser.add_argument('--coral', dest=CONST.CORAL, action='store_true',
+                        default=opt.coral)
+
+    # # Parse all arguments
+    args = parser.parse_args()
+    opt = set_config(**args.__dict__)
+
     # Initialize Logger
     base = '' if opt.mode != CONST.DEPLOY else '-'+ os.path.basename(
         opt.deploy_data).replace('.csv','')
