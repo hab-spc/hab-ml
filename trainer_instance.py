@@ -65,7 +65,7 @@ class Trainer(object):
         else:
             self.lemniscate = LinearAverage(opt.low_dim, opt.ndata, opt.nce_t, opt.nce_m).cuda()
         
-        self.lemniscate_val = LinearAverage(opt.low_dim, opt.ndata_val, opt.nce_t, 0).cuda()
+        self.lemniscate_val = LinearAverage(opt.low_dim, opt.ndata_val, opt.nce_t, 1).cuda()
         
         # define loss function
         if hasattr(self.lemniscate, 'K'):

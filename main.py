@@ -81,8 +81,13 @@ def train_and_evaluate(opt, logger=None, tb_logger=None):
                                         batch_size=opt.batch_size,
                                         mode=mode) for mode in [CONST.TRAIN, CONST.VAL]}
     # Create model
-    model = HABClassifier(arch=opt.arch, pretrained=opt.pretrained, num_classes=opt.class_num)
-
+    # model = HABClassifier(arch=opt.arch, pretrained=opt.pretrained, num_classes=opt.class_num)
+    model = resnet.create_model(arch=opt.arch, num_classes=opt.class_num)
+    if opt.pretrained_path:
+        fn = opt.pretrained_path
+        print("Name of the pretrained model filename is {}".format(fn))
+        model.load_pretrained_2(fn)
+    
     # Initialize Trainer for initializing losses, optimizers, loading weights, etc
     trainer = Trainer(model=model, model_dir=opt.model_dir, mode=opt.mode,
                       resume=opt.resume, lr=opt.lr,
@@ -367,8 +372,8 @@ def deploy(opt, logger=None):
                                  input_size=opt.input_size)
 
     # load model
-    model = HABClassifier(arch=opt.arch, pretrained=opt.pretrained, num_classes=opt.class_num)
-
+    # model = HABClassifier(arch=opt.arch, pretrained=opt.pretrained, num_classes=opt.class_num)
+    model = resnet.create_model(arch=opt.arch, num_classes=opt.class_num)
     # Initialize Trainer for initializing losses, optimizers, loading weights, etc
     trainer = Trainer(model=model, model_dir=opt.model_dir, mode=opt.mode,
                       resume=opt.resume)
@@ -426,6 +431,7 @@ if __name__ == '__main__':
     parser.add_argument('--freezed_layers', type=int, default=opt.freezed_layers)
     parser.add_argument('--pretrained', dest=CONST.PRETRAINED, action='store_true',
                         default=opt.pretrained)
+    parser.add_argument('--pretrained_path', type=str, default=opt.pretrained_path)
 
     # Model hyperparameters
     parser.add_argument('--input_size', type=int, default=opt.input_size)
@@ -476,6 +482,7 @@ if __name__ == '__main__':
     lab_config = arguments.pop(CONST.LAB_CONFIG)
     hab_eval = arguments.pop(CONST.HAB_EVAL)
     pretrained = arguments.pop(CONST.PRETRAINED)
+    pretrained_path = arguments.pop(CONST.PRETRAINED_PATH)
 
     opt = set_config(mode=mode, interactive=interactive, arch=arch,
                      model_dir=model_dir, data_dir=data_dir,
@@ -486,7 +493,7 @@ if __name__ == '__main__':
                      log2file=log2file, deploy_data=deploy_data,
                      lab_config=lab_config, save_model_db=save_model_db,
                      hab_eval=hab_eval, logging_level=logging_level,
-                     pretrained=pretrained)
+                     pretrained=pretrained, pretrained_path=pretrained_path)
     ## Usr Input
     if opt.mode != CONST.DEPLOY or opt.data_dir:
         if opt.interactive:

@@ -129,7 +129,38 @@ class ResNet(nn.Module):
                 else:
                     ckp_key = 'layer{}.{}.'.format(layer[0], int(layer[1])-1) + '.'.join(key_tkn[1:])
                 pretrained_fn[key] = checkpoint[ckp_key]
+                
+        self.load_state_dict(pretrained_fn)
+        
+    def load_pretrained_2(self, pretrained_fn):
+        """ Load pretrained weights without classifier weights from model generated .pth.tar file
 
+        Given an initialized model, one can load a pretrained model using
+        this function. It will expect one of the pretrained files from
+        pytorch in order to successfully load it.
+
+        Currently, the user must manually download it using the
+        `download_pretrained.py`, before being able to load a pretrained model
+
+        Args:
+            pretrained_fn (str): Absolute path to the pretrained ResNet model
+
+        Returns:
+            None
+
+        """
+        try:
+            checkpoint = torch.load(pretrained_fn)
+        except:
+            print(f'{pretrained_fn} not detected.')
+            exit()
+
+        state_dict = self.state_dict()
+            
+        pretrained_fn = checkpoint['state_dict']
+        pretrained_fn['classifier.weight'] = state_dict['classifier.weight']
+        pretrained_fn['classifier.bias'] = state_dict['classifier.bias']
+        
         self.load_state_dict(pretrained_fn)
 
 """BEGIN: ResNet model functions"""

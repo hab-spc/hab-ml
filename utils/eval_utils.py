@@ -75,7 +75,7 @@ class EvalMetrics(object):
         self.ids = ids
 
         # Initialize basename of the file as `pre` and create figs directory
-        self.pre = None
+        self.pre = ''
         self.results_dir = os.path.join(model_dir, 'figs')
         if not os.path.exists(self.results_dir):
             os.makedirs(self.results_dir)

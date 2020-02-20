@@ -195,11 +195,11 @@ def train(model, trainer, train_loader, epoch, logger, tb_logger,
     lemniscate = trainer.lemniscate
     
     # adjust lr (implmentation detail from lemniscate)
-    lr = opt.lr
-    if epoch >= 80:
-        lr = opt.lr * (0.1 ** ((epoch-80) // 40))
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
+    # lr = opt.lr
+    # if epoch >= 80:
+    #     lr = opt.lr * (0.1 ** ((epoch-80) // 40))
+    # for param_group in optimizer.param_groups:
+    #     param_group['lr'] = lr
 
     # Initialize meter to bookkeep the following parameters
     meter = get_meter(meters=['batch_time', 'data_time', 'loss'])

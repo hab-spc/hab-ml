@@ -31,6 +31,7 @@ class Constants():
     INPUT_SIZE = 'input_size'
     COLOR = 'color'
     PRETRAINED = 'pretrained'
+    PRETRAINED_PATH = 'pretrained_path'
     FREEZED_LAYERS = 'freezed_layers'
     WEIGHTED_LOSS = 'weighted_loss'
     ARCH = 'arch'

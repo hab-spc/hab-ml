@@ -49,14 +49,15 @@ class Config:
 
     # Training hyperparameters
     pretrained = False
+    pretrained_path = None
     lr = 0.001
     epochs = 15
     batch_size = 16
-    weighted_loss = False
+    weighted_loss = True
     freezed_layers = 0
 
     # Optimizer
-    use_adam = False
+    use_adam = True
     use_rmsprop = False
     use_adagrad = False
 
