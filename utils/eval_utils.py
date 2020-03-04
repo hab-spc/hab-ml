@@ -19,6 +19,7 @@ warnings.filterwarnings('ignore')
 from utils.config import opt
 from utils.constants import Constants as CONST
 from data.label_encoder import HABLblEncoder
+from data.label_encoder_51 import HABLblEncoder51
 
 mpl_logger = logging.getLogger('matplotlib')
 mpl_logger.setLevel(logging.WARNING)
@@ -85,7 +86,7 @@ class EvalMetrics(object):
         self.softmax = nn.Softmax(dim=1)
 
         # Initialize encoder for transforming labels into HAB labels
-        self.le = HABLblEncoder()
+        self.le = HABLblEncoder51()
 
         # Initialize set color for each class when plotting
         self.colors = None

@@ -1,0 +1,65 @@
+Train and Test Dataframe contructed
+Train Dataframe Class Counts table
+Sand                                     6044
+Prorocentrum micans                      2517
+Ciliates                                 2496
+Kelp Fragment                            2408
+Ceratium furca                           2015
+Ceratium falcatiforme or fusus           1268
+Cochlodinium                             1194
+Lingulodinium polyedra                   1146
+BadImageSegmentation                      796
+Nauplii                                   682
+diatom chain                              664
+Akashiwo                                  621
+Acantharea                                620
+Polykrikos                                560
+Protoperidinium                           552
+Thalassionema or Thalassiothrix chain     551
+Gyrodinium                                536
+Pseudo-nitzschia chain                    494
+Chattonella                               446
+Eucampia                                  420
+Ceratium other                            406
+Chaetoceros socialis                      404
+Dinophysis                                403
+Unknown pennate diatom                    388
+Prorocentrum gracile                      312
+Bubble                                    287
+Marine Lashes                             271
+Unknown dinoflagellates elongated         241
+Aggregate                                 235
+Torodinium                                208
+Name: label, dtype: int64
+VAL Dataframe Class Counts table
+Sand                                     1512
+Prorocentrum micans                       630
+Ciliates                                  624
+Kelp Fragment                             603
+Ceratium furca                            504
+Ceratium falcatiforme or fusus            318
+Cochlodinium                              299
+Lingulodinium polyedra                    287
+BadImageSegmentation                      199
+Nauplii                                   171
+diatom chain                              166
+Acantharea                                156
+Akashiwo                                  156
+Polykrikos                                141
+Protoperidinium                           139
+Thalassionema or Thalassiothrix chain     138
+Gyrodinium                                135
+Pseudo-nitzschia chain                    124
+Chattonella                               112
+Eucampia                                  105
+Ceratium other                            102
+Chaetoceros socialis                      101
+Dinophysis                                101
+Unknown pennate diatom                     97
+Prorocentrum gracile                       78
+Bubble                                     72
+Marine Lashes                              68
+Unknown dinoflagellates elongated          61
+Aggregate                                  59
+Torodinium                                 53
+Name: label, dtype: int64

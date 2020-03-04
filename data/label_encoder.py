@@ -40,6 +40,7 @@ class HABLblEncoder(LabelEncoder):
 
         self.classes = grab_classes(mode=self.mode, filename=classes_fname)
         self.hab_classes = open(opt.hab_eval_classes, 'r').read().splitlines()
+        print(self.hab_classes)
         self.habcls2idx = {cls:idx for idx, cls in enumerate(self.hab_classes)}
 
         # fit to classes

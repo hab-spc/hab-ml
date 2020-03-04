@@ -11,6 +11,7 @@ spc/test/*
 spc/micro_time_period.txt
 data/experiments/*
 data/spici/*
+experiments/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

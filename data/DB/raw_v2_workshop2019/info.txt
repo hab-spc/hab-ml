@@ -1,0 +1,107 @@
+Train and Test Dataframe contructed
+Train Dataframe Class Counts table
+Sand                                                    6044
+Prorocentrum                                            2517
+Ciliates                                                2496
+Kelp Fragment                                           2408
+Ceratium furca single                                   1623
+Ceratium falcatiforme fusus single                      1228
+Lingulodinium                                           1146
+Cochlodinium Alexandrium Gonyaulax Gymnodinium pair      851
+BadImageSegmentation                                     796
+Nauplii                                                  682
+Akashiwo                                                 621
+Acantharea                                               620
+Polykrikos                                               560
+Protoperidinium                                          552
+Thalassionema or Thalassiothrix chain                    551
+Gyrodinium                                               536
+Pseudo nitzschia chain                                   494
+Chattonella                                              446
+Chaetoceros socialis                                     404
+Unknown pennate diatom                                   388
+Ceratium other single                                    384
+Cochlodinium Alexandrium Gonyaulax Gymnodinium chain     343
+Dinophysis single                                        316
+Prorocentrum gracile                                     312
+Eucampia chain                                           296
+Bubble                                                   287
+Marine Lashes                                            271
+Curved diatom chain chaetoceros                          260
+Unknown dinoflagellates elongated                        241
+Aggregate                                                235
+Ceratium furca side                                      234
+Torodinium                                               208
+Ceratium furca pair                                      157
+Unknown dinoflagellates spherical                        144
+Curved diatom chain guinardia                            136
+Eucampia pair                                            123
+Straight diatom chains leptocylindrus epiphytes           92
+Dinophysis pair                                           86
+Thalassiosira chain                                       76
+Straight diatom chains with epiphytes                     76
+Phaeocystis                                               68
+Straight diatom chains chaetoceros                        65
+Unknown centric diatom                                    64
+Gymnodinium                                               45
+Licmophora                                                43
+Ceratium falcatiforme fusus pair                          40
+Protoperidinium flipped                                   36
+Straight diatom chains hemiaulus                          32
+Rhizosolenia or Proboscia                                 24
+Ceratium other pair                                       21
+Protoperidinium feeding                                   17
+Name: label, dtype: int64
+VAL Dataframe Class Counts table
+Sand                                                    1512
+Prorocentrum                                             630
+Ciliates                                                 624
+Kelp Fragment                                            603
+Ceratium furca single                                    406
+Ceratium falcatiforme fusus single                       308
+Lingulodinium                                            287
+Cochlodinium Alexandrium Gonyaulax Gymnodinium pair      213
+BadImageSegmentation                                     199
+Nauplii                                                  171
+Akashiwo                                                 156
+Acantharea                                               156
+Polykrikos                                               141
+Protoperidinium                                          139
+Thalassionema or Thalassiothrix chain                    138
+Gyrodinium                                               135
+Pseudo nitzschia chain                                   124
+Chattonella                                              112
+Chaetoceros socialis                                     101
+Unknown pennate diatom                                    97
+Ceratium other single                                     97
+Cochlodinium Alexandrium Gonyaulax Gymnodinium chain      86
+Dinophysis single                                         80
+Prorocentrum gracile                                      78
+Eucampia chain                                            75
+Bubble                                                    72
+Marine Lashes                                             68
+Curved diatom chain chaetoceros                           66
+Unknown dinoflagellates elongated                         61
+Ceratium furca side                                       59
+Aggregate                                                 59
+Torodinium                                                53
+Ceratium furca pair                                       40
+Unknown dinoflagellates spherical                         37
+Curved diatom chain guinardia                             35
+Eucampia pair                                             31
+Straight diatom chains leptocylindrus epiphytes           24
+Dinophysis pair                                           22
+Thalassiosira chain                                       19
+Straight diatom chains with epiphytes                     19
+Straight diatom chains chaetoceros                        17
+Phaeocystis                                               17
+Unknown centric diatom                                    17
+Gymnodinium                                               12
+Licmophora                                                11
+Ceratium falcatiforme fusus pair                          10
+Protoperidinium flipped                                    9
+Straight diatom chains hemiaulus                           8
+Rhizosolenia or Proboscia                                  7
+Ceratium other pair                                        6
+Protoperidinium feeding                                    5
+Name: label, dtype: int64
