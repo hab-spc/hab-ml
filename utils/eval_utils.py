@@ -274,8 +274,8 @@ class EvalMetrics(object):
             ax.text(width + 5, rect.get_y() + rect.get_height() / 2, format(label, fmt),
                     ha='center', va='bottom')
 
-        if save:
-            cm_fname = os.path.join(opt.model_dir, 'figs', self.pre + '_confusion.png')
+        if save:  
+            cm_fname = os.path.join(opt.model_dir, 'figs', '_confusion.png')
             plt.savefig(cm_fname)
         plt.show()
 
@@ -412,8 +412,12 @@ class EvalMetrics(object):
         log = '[FIGS] {}'.format(results_dir)
 
         # Compute classification report
+        
+        target_names = set(self.predictions + self.gtruth)
+        target_names = [self.le.habidx2cls[idx] for idx in target_names]
+    
         logger.info(metrics.classification_report(self.gtruth, self.predictions,
-                                          target_names=self.le.hab_classes))
+                                          target_names=target_names))
         logger.info(log)
 
     def _plot_dataset_distribution(self, data_dict):

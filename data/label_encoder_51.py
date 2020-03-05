@@ -38,6 +38,10 @@ class HABLblEncoder51(LabelEncoder):
         self.classes = grab_classes(mode=self.mode, filename=classes_fname)
         self.hab_classes = open(opt.hab_eval_classes, 'r').read().splitlines()
         self.habcls2idx = {cls:idx for idx, cls in enumerate(self.hab_classes)}
+        self.habidx2cls = {idx:cls for idx, cls in enumerate(self.hab_classes)}
+        
+        print("YEET THAT BEET")
+        print(self.habcls2idx)
 
         # fit to classes
         self.fit(self.classes)
