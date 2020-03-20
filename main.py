@@ -42,6 +42,7 @@ from utils.config import opt, set_config
 from utils.eval_utils import accuracy, get_meter, EvalMetrics, vis_training
 from utils.logger import Logger
 from utils.model_sql import model_sql
+from sql_database.updateScript import updatePreds
 
 # Module level constants
 
@@ -302,8 +303,22 @@ def evaluate(model, trainer, data_loader, epoch=0,
             logits = model(img)
             loss = criterion(logits, target)
             acc = accuracy(logits, target)
-            batch_size = list(batch[CONST.LBL].shape)[0]
-            
+            batch_size = list(batch[SPC_CONST.LBL].shape)[0]
+
+            # Update DB
+            if opt.lab_config == True:
+                update_list = []
+                image_fn = id
+                confidence = np.float64(np.max(logits.cpu().data.numpy(),axis=1))
+                model_name = opt.model_dir
+                pred = np.argmax(logits.cpu().data.numpy(),axis=1)
+                for i in range(batch_size):
+                    if batch_size != 1:
+                        update_list.append((opt.classes[pred[i]], confidence[i], model_name, image_fn[i]))
+                    else:
+                        update_list.append((opt.classes[pred[i]], confidence, model_name, image_fn[i]))
+                updatePreds(update_list)
+
             # update metrics
             meter['acc'].update(acc, batch_size)
             meter['loss'].update(loss, batch_size)
@@ -380,7 +395,21 @@ def deploy(opt, logger=None):
         model=trainer.model, trainer=trainer, data_loader=data_loader,
         logger=logger, tb_logger=tb_logger)
 
-    dest_dir = opt.deploy_data + '_static_html' if opt.lab_config else opt.deploy_data
+    # plot confusion matrix
+    plt.figure()
+    metrics.compute_cm(plot=True)
+
+    if opt.lab_config:
+        if os.path.exists(opt.deploy_data + '_processed'):
+            dest_dir = opt.deploy_data + '_processed'
+        elif os.path.exists(opt.deploy_data + '_static_html'):
+            dest_dir = opt.deploy_data + '_static_html'
+        else:
+            os.makedirs(opt.deploy_data + '_processed')
+            dest_dir = opt.deploy_data + '_processed'
+    else:
+        dest_dir = os.path.dirname(opt.deploy_data)
+    # dest_dir = opt.deploy_data + '_processed' if opt.lab_config else os.path.dirname(opt.deploy_data)
     metrics.save_predictions(start_datetime, run_time.avg, opt.model_dir,
                              dest_dir)
 
