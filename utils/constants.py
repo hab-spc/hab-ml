@@ -27,6 +27,8 @@ class Constants():
     TRAIN = 'train';
     VAL = 'val';
     DEPLOY = 'deploy'
+    IMG = 'images';
+    LBL = 'label'
     TRANSFORM = 'transform'
     INPUT_SIZE = 'input_size'
     COLOR = 'color'
