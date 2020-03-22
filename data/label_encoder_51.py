@@ -63,7 +63,7 @@ class HABLblEncoder51(LabelEncoder):
             return 'Cochlodinium'
         elif value in ['Lingulodinium']:
             return 'Lingulodinium polyedra'
-        elif value in ['Prorocentrum', 'Prorocentrum gracile']:
+        elif value in ['Prorocentrum']:
             return 'Prorocentrum micans'
         else:
             return 'Other'
