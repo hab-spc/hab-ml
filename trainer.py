@@ -1,5 +1,6 @@
 """Trainer"""
 # Standard dist imports
+import codecs
 import logging
 import os
 
@@ -9,15 +10,32 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from model.resnet import freezing_layers
 # Project level imports
+from model.model import HABClassifier
+
 from utils.config import opt
 from utils.constants import Constants as CONST
 from utils.eval_utils import get_meter
 from utils.model_sql import model_sql
 
-
 # Module level constants
+
+def build_classifier(opt, report_score=True, logger=None, out_file=None):
+    if out_file is None:
+        out_file = codecs.open(opt.output, 'w+', 'utf-8')
+
+    # if opt.gpu > -1:
+    #     torch.cuda.set_device(opt.gpu)
+
+    # load model
+    model = HABClassifier(arch=opt.arch, pretrained=opt.pretrained, num_classes=opt.class_num)
+
+    # Initialize Trainer for initializing losses, optimizers, loading weights, etc
+    classifier = Trainer(model=model, model_dir=opt.model_dir, mode=opt.mode,
+                      resume=opt.resume)
+
+    return classifier
+
 
 class Trainer(object):
     """Trains Model

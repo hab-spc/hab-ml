@@ -7,6 +7,7 @@ import sys
 import numpy as np
 import pandas as pd
 import torch
+from torch.autograd import Variable
 from PIL import Image
 
 # Project level imports
@@ -56,6 +57,14 @@ def rgb_preproc(img):
     img = (2. * img[:, :, :3] / 255. - 1).astype(np.float32)
     return img
 
+def compute_padding(img_size):
+    img_padding = [0, 0]
+    if img_size[0] > img_size[1]:
+        img_padding[1] = int((img_size[0] - img_size[1]) / 2)
+    else:
+        img_padding[0] = int((img_size[1] - img_size[0]) / 2)
+    img_padding = tuple(img_padding)
+    return img_padding
 
 def inverse_normalize():
     """#TODO Write function to un-normalize image to visualize
@@ -76,6 +85,7 @@ def grab_classes(mode, df_unique=None, filename=None):
     logger = logging.getLogger('grab_classes')
     if mode == CONST.TRAIN or mode == CONST.VAL:
         classes = df_unique
+        print(df_unique)
     else:
 
         # check if file is able to be opened

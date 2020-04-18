@@ -2,6 +2,7 @@
 # Standard dist imports
 import itertools
 import json
+import logging
 import os
 
 import matplotlib.pyplot as plt
@@ -30,6 +31,9 @@ class ReportGenerator(DataParser, EvalMetrics):
             hab_eval (bool):
             save (bool):
         """
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.INFO)
+
         if csv_fname:
             self.csv_fname = csv_fname
             self.csv_data = pd.read_csv(csv_fname)
@@ -53,9 +57,9 @@ class ReportGenerator(DataParser, EvalMetrics):
             self.class_list, \
             self.cls_count_train, \
             self.cls_count_val = self.get_dataset_statistics(train_fname, val_fname)
-            self.cls2idx, self.idx2cls = self.get_classes(self.class_list)
+            self.cls2idx, self.idx2cls = self.set_encode_decode(self.class_list)
 
-            self.le = HABLblEncoder(classes_fname=train_fname)
+            self.le = HABLblEncoder()
 
         # Initialize with prediction column to use given the hab_evaluation
         self.hab_eval = hab_eval
@@ -202,7 +206,8 @@ class ReportGenerator(DataParser, EvalMetrics):
         self.num_class = len(self.classes)
         self.gtruth = self.dataset[CONST.LBL].map(self.le.habcls2idx).tolist()
         self.predictions = self.dataset[self.pred_col].map(self.le.habcls2idx).tolist()
-        self.compute_cm(plot=True, save=False)
+        _, mca = self.compute_cm(plot=True, save=False)
+        return mca
 
     # Show Val Confusion Matrix
     def show_val_confusion_matrix(self):

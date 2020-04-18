@@ -85,7 +85,9 @@ class EvalMetrics(object):
         self.softmax = nn.Softmax(dim=1)
 
         # Initialize encoder for transforming labels into HAB labels
-        self.le = HABLblEncoder()
+        self.le = HABLblEncoder(classes_fname=os.path.join(opt.model_dir, 'train_data.info'))
+        self.classes, self.num_class = self.le.grab_classes()
+        self.le.fit(self.classes)
 
         # Initialize set color for each class when plotting
         self.colors = None
@@ -116,6 +118,26 @@ class EvalMetrics(object):
 
         ids = ids
         self.ids.extend(ids)
+
+    @staticmethod
+    def _accuracy_(targets, predictions):
+        batch_size = len(predictions)
+        hits = [t == p for t, p in zip(targets, predictions)]
+        return 100. * sum(hits) / float(batch_size)
+
+    def accuracy(self, predictions, targets, axis=1, hab_eval=False):
+        if hab_eval:
+            batch_size = predictions.size(0)
+            predictions = self.le.hab_transform2idx(predictions.max(axis)[1].cpu())
+            targets = self.le.hab_transform2idx(targets.cpu())
+            hits = [t==p for t,p in zip(targets, predictions)]
+            return 100. * sum(hits) / float(batch_size)
+        else:
+            batch_size = predictions.size(0)
+            predictions = predictions.max(axis)[1].type_as(targets)
+            hits = predictions.eq(targets)
+            acc = 100. * hits.sum().float() / float(batch_size)
+            return acc
     
     def compute_hab_acc(self):
         """ Compute HAB Accuracy
@@ -146,8 +168,8 @@ class EvalMetrics(object):
 
         # Create confusion matrix
         for t, p in zip(self.gtruth, self.predictions):
-            class_count[t, 0] += 1
-            confusion_matrix_rawcount[t, p] += 1
+            class_count[int(t), 0] += 1
+            confusion_matrix_rawcount[int(t), int(p)] += 1
         confusion_matrix_rate = np.zeros((self.num_class, self.num_class))
         for i in range(self.num_class):
             confusion_matrix_rate[i, :] = (confusion_matrix_rawcount[i, :]) / \
@@ -411,8 +433,12 @@ class EvalMetrics(object):
         log = '[FIGS] {}'.format(results_dir)
 
         # Compute classification report
-        logger.info(metrics.classification_report(self.gtruth, self.predictions,
-                                          target_names=self.le.hab_classes))
+        target_names = set(self.predictions + self.gtruth)
+        target_names = [self.le.habidx2cls[idx] for idx in target_names]
+        logger.info(metrics.classification_report(self.gtruth,
+                                                  self.predictions,
+                                                  target_names=target_names))
+
         logger.info(log)
 
     def _plot_dataset_distribution(self, data_dict):

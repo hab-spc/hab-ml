@@ -43,12 +43,12 @@ class Config:
     hab_in_vitro_summer2019 = '/data6/phytoplankton-db/csv/hab_in_vitro_summer2019.csv'
 
     # Network
-    arch = 'resnet50'
-    model_dir = './experiments/'
+    arch = 'resnet18'
+    model_dir = './experiments/resnet18_pretrained_c34_workshop2019_2/'
     input_size = 224
 
     # Training hyperparameters
-    pretrained = False
+    pretrained = True
     lr = 0.001
     epochs = 15
     batch_size = 16
@@ -87,7 +87,7 @@ class Config:
     sql_weight_path = ''
     train_acc = 0
     test_acc = 0
-    class_num = 2
+    class_num = 30
     add_comm = ''
     sql_log_path = ''
     freezed_layers = 0

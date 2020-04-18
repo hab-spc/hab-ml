@@ -24,6 +24,9 @@ class DataParser(object):
             classes (str): Abs path to the training.log that contains the classes
             save (bool): Flag to save the merged dataset
         """
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.INFO)
+
         if csv_fname:
             self.csv_fname = csv_fname
             self.csv_data = pd.read_csv(csv_fname)
@@ -111,13 +114,22 @@ class DataParser(object):
         _, images_per_class_val = DataParser._parse_info_file(val_fname)
         return class_list, images_per_class_train, images_per_class_val
 
-    def get_classes(self, class_list):
+    def get_classes(self, data):
+        """Set class2idx, idx2class encoding/decoding dictionaries"""
+        df = data.copy()
+        classes = df[CONST.LBL].unique()
+        num_class = len(classes)
+        return classes, num_class
+
+    def set_encode_decode(self, class_list):
         """Set class2idx, idx2class encoding/decoding dictionaries"""
         cls2idx = {i: idx for idx, i in enumerate(sorted(class_list))}
         idx2cls = {idx: i for idx, i in enumerate(sorted(class_list))}
+        self.logger.debug('Class mappings: {}'.format(cls2idx))
         return cls2idx, idx2cls
 
-    def get_ROI_counts(self, data, date_col='image_date', gtruth=False, pred=False, verbose=False):
+    def get_ROI_counts(self, data, date_col='image_date', gtruth=False, pred=False,
+                       verbose=False, use_valid_dates=False):
         """ Given a particular date column retrieve all ROIs within the time range
 
         Region of Interest (RoI) is considered an image
@@ -131,6 +143,12 @@ class DataParser(object):
 
         """
         df = data.copy()
+
+        if use_valid_dates:
+            dates_txt = '/data6/phytoplankton-db/valid_collection_dates_master.txt'
+            df = DataParser.filter_valid_dates(df, date_col=date_col,
+                                               dates_txt=dates_txt)
+
         grouped_dates = df.groupby(date_col)
         ROI_counts = {}
         for idx, date_df in grouped_dates:
@@ -139,21 +157,33 @@ class DataParser(object):
 
             temp['ROI_count'] = num_ROIs
             if gtruth:
-                temp['gtruth_dist'] = df['label'].map(self.idx2cls).value_counts().to_dict()
+                temp['gtruth_dist'] = df[CONST.LBL].map(self.idx2cls).value_counts().to_dict()
             if pred:
-                temp['pred_dist'] = df['pred'].map(self.idx2cls).value_counts().to_dict()
-            temp['start_time'] = date_df['start_time'].iloc[0]
-            temp['end_time'] = date_df['end_time'].iloc[0]
-            temp['min_len'] = date_df['min_len'].iloc[0]
-            temp['max_len'] = date_df['max_len'].iloc[0]
-            temp['cam'] = date_df['cam'].iloc[0]
+                temp['pred_dist'] = df[CONST.PRED].map(self.idx2cls).value_counts().to_dict()
+            # temp['start_time'] = date_df['start_time'].iloc[0]
+            # temp['end_time'] = date_df['end_time'].iloc[0]
+            # temp['min_len'] = date_df['min_len'].iloc[0]
+            # temp['max_len'] = date_df['max_len'].iloc[0]
+            # temp['cam'] = date_df['cam'].iloc[0]
 
             ROI_counts[str(idx)] = temp
 
+        if verbose:
+            for k, v in ROI_counts.items():
+                self.logger.info('\n{0:*^80}'.format(' {} ({}) '.format(k, v["ROI_count"])))
+                self.logger.info(f'Date: {k}')
+                self.logger.info(f'Total ROIs: {v["ROI_count"]}')
+                self.logger.info(f'HAB Species Distribution\n{"-" * 30}')
+                for cls, count in v["gtruth_dist"].items():
+                    self.logger.info('{:50} {:5}'.format(cls, count))
         return ROI_counts
 
     #==== END: GETTER CALLS ===#
-
+    @staticmethod
+    def filter_valid_dates(data, date_col='image_date', dates_txt=None):
+        df = data.copy()
+        valid_dates = open(dates_txt, 'r').read().splitlines()
+        return df[df[date_col].isin(valid_dates)].reset_index(drop=True)
 
     @staticmethod
     def extract_img_id(x):

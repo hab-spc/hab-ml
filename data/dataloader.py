@@ -18,8 +18,10 @@ from torch.autograd import Variable
 from torch.utils.data import Dataset
 
 # Project level imports
-from data.d_utils import pil_loader, grab_classes
+from data.d_utils import pil_loader, compute_padding
 from data.label_encoder import HABLblEncoder
+from data.transforms import DATA_TRANSFORMS
+from data.parse_data import DataParser
 from utils.config import opt
 from utils.constants import Constants as CONST
 from utils.constants import SPCConstants as SPC_CONST
@@ -32,7 +34,7 @@ CLASSES = {}
 UNKNOWN = {999: 'Unknown'}
 NUM_CLASSES = len(CLASSES.keys())
 
-class SPCHABDataset(Dataset):
+class SPCHABDataset(Dataset, DataParser):
     """Custom Dataset class for the SPC Hab Dataset
 
     Current this is configured for the prorocentrum dataset...
@@ -40,7 +42,7 @@ class SPCHABDataset(Dataset):
     CSV files are located in a subdir `.../csv/`
 
     """
-    def __init__(self, csv_file=None, data_dir=None, mode='train', input_size=224):
+    def __init__(self, csv_file=None, mode='train', transforms=None):
         """Initializes SPCHabDataset
 
         Args:
@@ -59,60 +61,25 @@ class SPCHABDataset(Dataset):
         """
         assert mode in (CONST.TRAIN, CONST.VAL, CONST.DEPLOY), 'mode: train, val, deploy'
         self.mode = mode
-        self.input_size = input_size
-        self.rescale_size = input_size
+        self.transforms = transforms
+
         Logger.section_break(f'{self.mode.upper()} Dataset')
         self.logger = logging.getLogger('dataloader_'+mode)
         self.logger.setLevel(opt.logging_level)
         
         # === Read in the dataset ===#
         # options for reading datasets can be from a csv file or directory containing csv files.
-        if self.mode != CONST.DEPLOY:
-            csv_file = os.path.join(data_dir, '{}.csv').format(mode)
 
         # If deployment, create dataset from csv file
         # Else (training or validation) access csv file given data directory and mode
         self.data = pd.read_csv(csv_file)
 
-        # get classes and save it
-        if self.mode == CONST.TRAIN or self.mode == CONST.VAL:
-            classes_fname = os.path.join(opt.model_dir, '{}_data.info'.format(self.mode))
-            df_unique = self.data[SPC_CONST.LBL].unique()
+        self.le = HABLblEncoder(mode=mode)
+        self.classes, self.num_class = self.le.grab_classes(data=self.data)
+        self.cls2idx, self.idx2cls = self.set_encode_decode(self.classes)
+        self.le.fit(self.classes)
 
-            with open(classes_fname, 'w') as f:
-                f.write(str(self.data[SPC_CONST.LBL].value_counts()))
-
-            # gets classes based off dataframe
-            self.classes = opt.classes = grab_classes(self.mode, df_unique=df_unique)
-        else:
-            # gets classes based off the train_data.info that is written during training
-            classes_fname = os.path.join(opt.model_dir, 'train_data.info')
-            self.classes = opt.classes = grab_classes(self.mode, filename=classes_fname)
-
-        self.num_class = opt.class_num = len(self.classes)
-        self.logger.info('All classes detected are: '+str(self.classes))
-        self.logger.info('opt.class_num = '+str(opt.class_num))
-
-        # Clarify what transformations are needed here
-        self.data_transform = {
-            CONST.TRAIN: transforms.Compose([transforms.Resize(self.rescale_size),
-                                             transforms.CenterCrop(input_size),
-                                             transforms.RandomAffine(360, translate=(0.1, 0.1), scale=None, shear=None,
-                                                                     resample=Image.BICUBIC, fillcolor=0),
-                                             transforms.ToTensor(),
-                                             # transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
-                                             ]),
-            CONST.VAL: transforms.Compose([transforms.Resize(self.rescale_size),
-                                           transforms.CenterCrop(input_size),
-                                           transforms.ToTensor(),
-                                           # transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
-                                           ]),
-            CONST.DEPLOY: transforms.Compose([transforms.Resize(self.rescale_size),
-                                              transforms.CenterCrop(input_size),
-                                              transforms.ToTensor(),
-                                              # transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
-                                              ])
-        }
+        self.default_unlabeled_idx = 0 # OTHER
 
 
     def __len__(self):
@@ -127,61 +94,38 @@ class SPCHABDataset(Dataset):
         Returns:
 
         """
+        # get image file path, label, and image_identifier
+        img = self.data.iloc[index][CONST.IMG]
+        target = self.data.iloc[index][CONST.LBL]
+        id = self.data.iloc[index][CONST.IMG]
+
+
         # Load image
-        img = pil_loader(self.data.iloc[index][SPC_CONST.IMG])
-        ### Padding to Square
-        img_size = img.size
-        img_padding = [0,0]
-        if img_size[0] > img_size[1]:
-            img_padding[1] = int((img_size[0]-img_size[1])/2)
-        else:
-            img_padding[0] = int((img_size[1]-img_size[0])/2)
-        img_padding = tuple(img_padding)
-        img = transforms.Pad(img_padding,fill=0, padding_mode='constant')(img)
-        ###
-        img = self.data_transform[self.mode](img)
+        img = pil_loader(img)
+        # Apply data augmentation
+        if self.transforms != None:
+            # Padding to Square
+            img = transforms.Pad(compute_padding(img.size),
+                                 fill=0, padding_mode='constant')(img)
+            img = self.transforms(img)
 
-        if SPC_CONST.LBL not in self.data.columns:
-            target = self.data.iloc[index]['user_labels']
-        else:
-            target = self.data.iloc[index][SPC_CONST.LBL]
-
+        # Encode label
         if not isinstance(target, (int, np.int64)):
             target = self.encode_labels(target)
 
-        if opt.lab_config == True:
-            if SPC_CONST.ID in self.data.columns.values:
-                id = self.data.iloc[index][SPC_CONST.ID]
-            else:
-                id = 0
-        else:
-            if SPC_CONST.IMG in self.data.columns.values:
-                id = self.data.iloc[index][SPC_CONST.IMG]
-            else:
-                id = 0
-
-        return {SPC_CONST.IMG: img, SPC_CONST.LBL: target, SPC_CONST.ID: id}
+        return {CONST.IMG: img, CONST.LBL: target, CONST.ID:id}
     
     def encode_labels(self, label):
-        """ Encode labels given the enumerated class index
+        if label in self.cls2idx:
+            return self.cls2idx[label]
+        else:
+            return self.default_unlabeled_idx
 
-        Loss function from PyTorch expects labels to be in class indices,
-        rather than one hot encodings.
+    def get_class_counts(self):
+        return self.data[CONST.LBL].value_counts()
 
-        Args:
-            label (str): Ground truth
 
-        Returns:
-            int: Class index
-
-        """
-        cls_idx_lbl = 0
-        for idx, each in enumerate(self.classes):
-            if each == label:
-                cls_idx_lbl = idx
-        return cls_idx_lbl
-
-def get_dataloader(data_dir=None, csv_file=None, batch_size=1, input_size=224, shuffle=True,
+def get_dataloader(data_dir=None, csv_file=None, batch_size=1, shuffle=True,
                    num_workers=4, mode=CONST.TRAIN):
     """ Get the dataloader
 
@@ -200,26 +144,18 @@ def get_dataloader(data_dir=None, csv_file=None, batch_size=1, input_size=224, s
         dict: Dictionary holding each type of dataloader
 
     """
+    logger = logging.getLogger('dataloader_' + mode)
+    logger.setLevel(opt.logging_level)
 
-    # Create a dataset from the training and validation csv files (consolidated in one data directory)
-    logger = logging.getLogger('dataloader')
-    if mode in [CONST.TRAIN, CONST.VAL] and data_dir:
-        if not os.path.exists(data_dir) or len(os.listdir(data_dir)) == 0:
-            logger.error('Data dir not detected. Need to create dataset @ {}'.format(data_dir))
-            raise NotADirectoryError('Directory does not exist')
+    if mode != CONST.DEPLOY:
+        csv_file = os.path.join(opt.data_dir, '{}.csv'.format(mode))
 
-        else:
-            dataset = SPCHABDataset(data_dir=data_dir, mode=mode,
-                                    input_size=input_size)
+    dataset = SPCHABDataset(csv_file=csv_file, mode=mode,
+                                    transforms=DATA_TRANSFORMS[mode])
 
-    # Else create dataset from the given csv file (assumed for evaluation/deployment use case)
-    else:
-        if not os.path.exists(csv_file):
-            raise ValueError('File does not exist')
-
-        else:
-            dataset = SPCHABDataset(csv_file=csv_file, mode=mode,
-                                    input_size=input_size)
+    logger.debug(f'Dataset Distribution\n{"-" * 30}\n'
+                 f'{dataset.get_class_counts()}\n')
+    logger.info('Dataset size: {}'.format(dataset.__len__()))
 
     # Create the dataloader from the given dataset
     data_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
@@ -229,20 +165,15 @@ def get_dataloader(data_dir=None, csv_file=None, batch_size=1, input_size=224, s
 
 def to_cuda(item, computing_device, label=False):
     """ Typecast item to cuda()
-
     Wrapper function for typecasting variables to cuda() to allow for
     flexibility between different types of variables (i.e. long, float)
-
     Loss function usually expects LongTensor type for labels, which is why
     label is defined as a bool.
-
     Computing device is usually defined in the Trainer()
-
     Args:
         item: Desired item. No specific type
         computing_device (str): Desired computing device.
         label (bool): Flag to convert item to long() or float()
-
     Returns:
         item
     """

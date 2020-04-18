@@ -81,9 +81,12 @@ def train_and_evaluate(opt, logger=None, tb_logger=None):
                                         batch_size=opt.batch_size,
                                         mode=mode) for mode in [CONST.TRAIN, CONST.VAL]}
     # Create model
+    Logger.section_break('MODEL ARCHITECTURE')
     model = HABClassifier(arch=opt.arch, pretrained=opt.pretrained, num_classes=opt.class_num)
+    logger.debug(model)
 
     # Initialize Trainer for initializing losses, optimizers, loading weights, etc
+    Logger.section_break('MODEL TRAINER')
     trainer = Trainer(model=model, model_dir=opt.model_dir, mode=opt.mode,
                       resume=opt.resume, lr=opt.lr,
                       class_count=data_loader[CONST.TRAIN].dataset.data[CONST.LBL].value_counts())
@@ -363,8 +366,7 @@ def deploy(opt, logger=None):
 
     # read data
     data_loader = get_dataloader(mode=CONST.DEPLOY, csv_file=opt.deploy_data,
-                                 batch_size=opt.batch_size,
-                                 input_size=opt.input_size)
+                                 batch_size=opt.batch_size)
 
     # load model
     model = HABClassifier(arch=opt.arch, pretrained=opt.pretrained, num_classes=opt.class_num)
@@ -451,42 +453,10 @@ if __name__ == '__main__':
     # # Parse all arguments
     args = parser.parse_args()
     arguments = args.__dict__
+    opt = set_config(**args.__dict__)
 
-    # Example of passing in arguments as the new configurations
-    #TODO find more efficient way to pass in arguments into configuration file
-    mode = arguments.pop(CONST.MODE).lower()
-    interactive = arguments.pop(CONST.INTERACTIVE)
-    arch = arguments.pop(CONST.ARCH)
-    model_dir = arguments.pop(CONST.MODEL_DIR)
-    data_dir = arguments.pop(CONST.DATA_DIR)
-    lr = arguments.pop(CONST.LR)
-    epochs = arguments.pop(CONST.EPOCHS)
-    batch_size = arguments.pop(CONST.BATCH)
-    input_size = arguments.pop(CONST.INPUT_SIZE)
-    weighted_loss = arguments.pop(CONST.WEIGHTED_LOSS)
-    freezed_layers = arguments.pop(CONST.FREEZED_LAYERS)
-    gpu = arguments.pop(CONST.GPU)
-    resume = arguments.pop(CONST.RESUME)
-    print_freq = arguments.pop(CONST.PRINT_FREQ)
-    save_freq = arguments.pop(CONST.SAVE_FREQ)
-    log2file = arguments.pop(CONST.LOG2FILE)
-    logging_level = arguments.pop(CONST.LOGGING_LVL)
-    save_model_db = arguments.pop(CONST.SAVE_MODEL_DB)
-    deploy_data = arguments.pop(CONST.DEPLOY_DATA)
-    lab_config = arguments.pop(CONST.LAB_CONFIG)
-    hab_eval = arguments.pop(CONST.HAB_EVAL)
-    pretrained = arguments.pop(CONST.PRETRAINED)
+    #TODO save json file of config file here ????
 
-    opt = set_config(mode=mode, interactive=interactive, arch=arch,
-                     model_dir=model_dir, data_dir=data_dir,
-                     lr=lr, epochs=epochs, batch_size=batch_size,
-                     weighted_loss=weighted_loss, freezed_layers=freezed_layers,
-                     input_size=input_size, gpu=gpu, resume=resume,
-                     print_freq=print_freq, save_freq=save_freq,
-                     log2file=log2file, deploy_data=deploy_data,
-                     lab_config=lab_config, save_model_db=save_model_db,
-                     hab_eval=hab_eval, logging_level=logging_level,
-                     pretrained=pretrained)
     ## Usr Input
     if opt.mode != CONST.DEPLOY or opt.data_dir:
         if opt.interactive:

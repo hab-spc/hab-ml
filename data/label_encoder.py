@@ -38,12 +38,30 @@ class HABLblEncoder(LabelEncoder):
                 raise OSError('File not found. Please double check if it has been '
                               'generated via training')
 
-        self.classes = grab_classes(mode=self.mode, filename=classes_fname)
         self.hab_classes = open(opt.hab_eval_classes, 'r').read().splitlines()
         self.habcls2idx = {cls:idx for idx, cls in enumerate(self.hab_classes)}
+        self.habidx2cls = {idx: cls for idx, cls in enumerate(self.hab_classes)}
 
-        # fit to classes
-        self.fit(self.classes)
+
+    def grab_classes(self, data=None, model_dir=None):
+        model_dir = model_dir if model_dir != None else opt.model_dir
+
+        if self.mode == CONST.TRAIN or self.mode == CONST.VAL:
+            classes_fname = os.path.join(model_dir, '{}_data.info'.format(self.mode))
+            df_unique = data[CONST.LBL].unique()
+
+            with open(classes_fname, 'w') as f:
+                f.write(str(data[CONST.LBL].value_counts()))
+
+            # gets classes based off dataframe
+            self.classes = opt.classes = grab_classes(self.mode, df_unique=df_unique)
+        else:
+            # gets classes based off the train_data.info that is written during training
+            classes_fname = os.path.join(model_dir, 'train_data.info')
+            self.classes = opt.classes = grab_classes(self.mode, filename=classes_fname)
+
+        self.num_class = len(self.classes)
+        return self.classes, self.num_class
 
     def hab_map(self, value):
         """Helper function to map classes to hab classes
