@@ -163,6 +163,7 @@ class ServerModel:
         opt.models = [os.path.join(self.model_root, model)
                          for model in models]
         opt.src = "dummy_src"
+        opt.cuda = torch.cuda.is_available()
 
         return opt
 
